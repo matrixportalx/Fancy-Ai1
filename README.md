@@ -1,4 +1,5 @@
-<img width="1762" height="984" alt="image" src="https://github.com/user-attachments/assets/dfb98893-d587-416f-9e29-936c4436a1b0" />
+<img width="1906" height="755" alt="image" src="https://github.com/user-attachments/assets/e2a14cb6-12e2-4868-956f-2896b2268f4e" />
+
 
 # Fancy AI 🚀
 ### Virtual Intelligence Phone OS & Generative Playground
