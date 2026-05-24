@@ -24,6 +24,7 @@ const ContactsApp = {
                 display: flex;
                 flex-direction: column;
                 background: #0a0a0b;
+                overflow-y: auto;
                 padding-bottom: 100px;
             }
             .contacts-header {
@@ -50,14 +51,13 @@ const ContactsApp = {
                 grid-template-columns: repeat(2, 1fr);
                 gap: 12px;
                 padding: 12px;
-                overflow-y: auto;
             }
             .char-card {
                 background: var(--bg-card);
                 border-radius: 24px;
                 overflow: hidden;
                 border: 1px solid var(--border);
-                aspect-ratio: 1/1.4;
+                aspect-ratio: 1/1.35;
                 position: relative;
                 display: flex;
                 flex-direction: column;
@@ -83,13 +83,14 @@ const ContactsApp = {
             
             .char-card-overlay {
                 position: absolute; bottom: 0; left: 0; right: 0;
-                background: linear-gradient(transparent, rgba(0,0,0,0.9) 70%);
-                padding: 16px 12px 12px;
+                background: linear-gradient(transparent, rgba(0,0,0,0.95) 60%);
+                padding: 20px 12px 10px;
                 display: flex;
-                flex-direction: column; gap: 2px;
+                flex-direction: column; gap: 1px;
+                min-height: 0;
             }
-            .char-card-name { font-weight: 800; color: white; font-size: 1rem; text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
-            .char-card-handle { font-size: 0.72rem; color: var(--accent); font-weight: 700; }
+            .char-card-name { font-weight: 800; color: white; font-size: 0.9rem; text-shadow: 0 2px 4px rgba(0,0,0,0.5); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            .char-card-handle { font-size: 0.7rem; color: var(--accent); font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
             /* PROFILE VIEW */
             .p-view-header {
@@ -320,8 +321,43 @@ const ContactsApp = {
 
     delete: function(charId) {
         if (State.characters.length <= 1) return alert("Must have at least one character.");
-        if (!confirm("Delete this character?")) return;
+        if (!confirm("Delete this character? Their avatar, session images, and social feed posts will also be removed.")) return;
+
+        // Clean up associated images
+        const char = State.characters.find(c => c.id === charId);
+        if (char) {
+            // Delete avatar from storage
+            if (char.avatar && char.avatar.startsWith('db:') && window.ImageDB) {
+                window.ImageDB.delete(char.avatar.replace('db:', ''));
+            }
+            // Delete session images
+            const session = State.sessions[charId] || [];
+            session.forEach(msg => {
+                if (msg.type === 'image' && msg.text && msg.text.startsWith('db:') && window.ImageDB) {
+                    window.ImageDB.delete(msg.text.replace('db:', ''));
+                }
+                if (msg.type === 'img2img' && window.ImageDB) {
+                    if (msg.source && msg.source.startsWith('db:')) window.ImageDB.delete(msg.source.replace('db:', ''));
+                    if (msg.text && msg.text.startsWith('db:')) window.ImageDB.delete(msg.text.replace('db:', ''));
+                }
+            });
+            // Delete social feed posts images
+            [State.instagramPosts, State.redditPosts, State.xPosts].forEach(posts => {
+                if (posts) {
+                    for (let i = posts.length - 1; i >= 0; i--) {
+                        if (posts[i].charId === charId) {
+                            if (posts[i].image && posts[i].image.startsWith('db:') && window.ImageDB) {
+                                window.ImageDB.delete(posts[i].image.replace('db:', ''));
+                            }
+                            posts.splice(i, 1);
+                        }
+                    }
+                }
+            });
+        }
+
         State.characters = State.characters.filter(c => c.id !== charId);
+        delete State.sessions[charId];
         State.save();
         OS.goBack();
     }

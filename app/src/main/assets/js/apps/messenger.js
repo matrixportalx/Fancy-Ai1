@@ -164,13 +164,92 @@ const MessengerApp = {
     nextCharacter: function() {
         const chars = State.characters || [];
         if (chars.length <= 1) return;
-        const currentIndex = chars.findIndex(c => c.id === this.activeCharId);
-        const nextIndex = (currentIndex + 1) % chars.length;
-        this.activeCharId = chars[nextIndex].id;
-        State.activeCharId = this.activeCharId;
-        State.save();
-        this.render();
-        this.renderChatLog();
+
+        // Remove any existing popup
+        const existing = document.getElementById('charSelectorPopup');
+        if (existing) existing.remove();
+
+        const popup = document.createElement('div');
+        popup.id = 'charSelectorPopup';
+        popup.style.cssText = `
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 99998; display: flex; align-items: flex-start;
+            justify-content: center; padding-top: 80px;
+            background: rgba(0,0,0,0.5); backdrop-filter: blur(4px);
+        `;
+        popup.onclick = (e) => { if (e.target === popup) popup.remove(); };
+
+        const sheet = document.createElement('div');
+        sheet.style.cssText = `
+            background: #1a1a1e; border-radius: 20px; padding: 8px;
+            min-width: 240px; max-width: 300px; width: 80%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+            border: 1px solid rgba(255,255,255,0.06);
+            max-height: 60vh; overflow-y: auto;
+        `;
+
+        chars.forEach(char => {
+            const item = document.createElement('div');
+            item.style.cssText = `
+                display: flex; align-items: center; gap: 12px;
+                padding: 12px 14px; border-radius: 14px;
+                cursor: pointer; transition: background 0.15s;
+                ${char.id === this.activeCharId ? 'background: rgba(139,92,246,0.15);' : ''}
+            `;
+            item.onmouseenter = () => { item.style.background = 'rgba(255,255,255,0.06)'; };
+            item.onmouseleave = () => { item.style.background = char.id === this.activeCharId ? 'rgba(139,92,246,0.15)' : 'transparent'; };
+            item.onclick = () => {
+                this.activeCharId = char.id;
+                State.activeCharId = this.activeCharId;
+                State.save();
+                popup.remove();
+                this.render();
+                this.renderChatLog();
+            };
+
+            const avatar = document.createElement('div');
+            avatar.style.cssText = `
+                width: 36px; height: 36px; border-radius: 12px;
+                background: linear-gradient(135deg, #8b5cf6, #6366f1);
+                color: white; display: flex; align-items: center;
+                justify-content: center; font-weight: 800; font-size: 0.9rem;
+                flex-shrink: 0; overflow: hidden;
+            `;
+            if (char.avatar) {
+                (async () => {
+                    let src = char.avatar;
+                    if (src.startsWith('db:') && window.ImageDB) src = await window.ImageDB.get(src);
+                    if (src) avatar.innerHTML = `<img src="${src}" style="width:100%;height:100%;object-fit:cover;">`;
+                })();
+            } else {
+                avatar.textContent = char.name[0];
+            }
+
+            const info = document.createElement('div');
+            info.style.cssText = 'display:flex; flex-direction:column; gap:1px; min-width:0;';
+            const name = document.createElement('div');
+            name.style.cssText = 'font-weight:700; color:white; font-size:0.9rem; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;';
+            name.textContent = char.name;
+            const handle = document.createElement('div');
+            handle.style.cssText = 'font-size:0.7rem; color:var(--text-muted); font-weight:600;';
+            handle.textContent = char.handle || '@ai';
+
+            if (char.id === this.activeCharId) {
+                const check = document.createElement('span');
+                check.textContent = ' ✓';
+                check.style.cssText = 'color: var(--accent);';
+                name.appendChild(check);
+            }
+
+            info.appendChild(name);
+            info.appendChild(handle);
+            item.appendChild(avatar);
+            item.appendChild(info);
+            sheet.appendChild(item);
+        });
+
+        popup.appendChild(sheet);
+        document.body.appendChild(popup);
     },
 
     handleFileSelect: function(e) {

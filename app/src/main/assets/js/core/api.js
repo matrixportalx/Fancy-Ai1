@@ -7,7 +7,7 @@ window.API = {
      * Dispatches text generation requests based on user settings.
      * Supports real-time streaming if an onUpdate callback is provided.
      */
-    sendMessage: async function(charId, userText, onUpdate = null) {
+    sendMessage: async function(charId, userText, onUpdate = null, includeHistory = true) {
         if (typeof State === 'undefined') throw new Error("State module not found.");
 
         const char = (State.characters || []).find(c => c.id === charId) || {};
@@ -92,13 +92,15 @@ CRITICAL RULES for "flux prompt:":
 
         const messages = [{ role: "system", content: systemContent }];
 
-        // Context window management (Last 16 messages for better continuity)
-        history.slice(-16).forEach(msg => {
-            messages.push({
-                role: msg.sender === 'user' ? 'user' : 'assistant',
-                content: msg.text
+        // Context window management — skip history when includeHistory is false (social posts)
+        if (includeHistory) {
+            history.slice(-16).forEach(msg => {
+                messages.push({
+                    role: msg.sender === 'user' ? 'user' : 'assistant',
+                    content: msg.text
+                });
             });
-        });
+        }
 
         // Add current prompt
         if (messages.length === 1 || messages[messages.length - 1].content !== userText) {
