@@ -1,6 +1,14 @@
 <img width="1906" height="755" alt="image" src="https://github.com/user-attachments/assets/e2a14cb6-12e2-4868-956f-2896b2268f4e" />
 
 
+
+
+
+⚠️ IMPORTANT SETUP NOTE:
+
+This app requires you to bring your own API keys. You must generate and enter your own OpenRouter or DeepInfra keys in the app settings to activate the AI features.
+(Custom OpenAi Endpoint: You can run your local LLM and link it to the app in the settings) 
+
 # Fancy AI 🚀
 ### Virtual Intelligence Phone OS & Generative Playground
 
