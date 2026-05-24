@@ -292,6 +292,8 @@ const GalleryApp = {
             this.updateBulkCount();
             this.updateDeleteBtn();
             this.loadGalleryGrid();
+            // Trigger orphan cleanup after bulk delete
+            if (window.ImageDB && window.ImageDB.purgeOrphanedFiles) window.ImageDB.purgeOrphanedFiles();
         } catch (err) {
             alert("Delete failed: " + err.message);
         }

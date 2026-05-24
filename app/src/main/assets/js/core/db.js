@@ -109,8 +109,51 @@ window.ImageDB = {
     delete: async function(id) {
         await this.init();
         if (this.registry[id]) {
+            // Also delete the physical file from disk if it exists
+            const record = this.registry[id];
+            if (record.data && record.data.startsWith('file:') && window.AndroidBridge &&
+                typeof window.AndroidBridge.deleteFile === 'function') {
+                try {
+                    window.AndroidBridge.deleteFile(record.data.replace('file:', ''));
+                } catch(e) {
+                    console.error("Failed to delete physical file:", e);
+                }
+            }
             delete this.registry[id];
             this._persist();
+        }
+    },
+
+    /**
+     * Purges ALL orphaned physical files from disk that are no longer in the registry.
+     * Call this after deleting characters, clearing social feeds, or clearing gallery.
+     */
+    purgeOrphanedFiles: async function() {
+        await this.init();
+        if (!window.AndroidBridge || typeof window.AndroidBridge.listMediaFiles !== 'function') return;
+        try {
+            const raw = window.AndroidBridge.listMediaFiles();
+            const files = JSON.parse(raw);
+            if (!files || !files.length) return;
+            const activeFiles = new Set();
+            for (const id in this.registry) {
+                const data = this.registry[id].data;
+                if (data && data.startsWith('file:')) {
+                    activeFiles.add(data.replace('file:', ''));
+                }
+            }
+            let deletedCount = 0;
+            for (const fileName of files) {
+                if (!activeFiles.has(fileName)) {
+                    window.AndroidBridge.deleteFile('media/' + fileName);
+                    deletedCount++;
+                }
+            }
+            if (deletedCount > 0) {
+                console.log(`Purged ${deletedCount} orphaned media files from disk`);
+            }
+        } catch(e) {
+            console.error("Orphan purge failed:", e);
         }
     },
 

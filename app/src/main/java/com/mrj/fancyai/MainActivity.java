@@ -253,6 +253,35 @@ public class MainActivity extends AppCompatActivity {
                 }
             } catch (Exception e) { Log.e("FancyAI", "Share failed", e); }
         }
+
+        @JavascriptInterface
+        public void deleteFile(String fileName) {
+            try {
+                File file = new File(getFilesDir(), fileName);
+                if (file.exists()) file.delete();
+            } catch (Exception e) {
+                Log.e("FancyAI", "File delete failed", e);
+            }
+        }
+
+        @JavascriptInterface
+        public String listMediaFiles() {
+            try {
+                File dir = new File(getFilesDir(), "media");
+                if (!dir.exists() || !dir.isDirectory()) return "[]";
+                File[] files = dir.listFiles();
+                if (files == null) return "[]";
+                StringBuilder sb = new StringBuilder("[");
+                for (int i = 0; i < files.length; i++) {
+                    if (i > 0) sb.append(",");
+                    sb.append("\"").append(files[i].getName()).append("\"");
+                }
+                sb.append("]");
+                return sb.toString();
+            } catch (Exception e) {
+                return "[]";
+            }
+        }
     }
 
     private void checkPermissionsAndLaunch(Intent intent) {
