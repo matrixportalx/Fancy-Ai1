@@ -106,6 +106,23 @@ window.ImageDB = {
         return results;
     },
 
+    /**
+     * Returns registry entries sorted by timestamp descending (newest first).
+     * Does NOT load image data — just IDs and timestamps.
+     * Used by Gallery for lazy loading.
+     */
+    getRegistry: async function() {
+        await this.init();
+        const results = [];
+        const sortedIds = Object.keys(this.registry).sort((a, b) => {
+            return (this.registry[b].timestamp || 0) - (this.registry[a].timestamp || 0);
+        });
+        for (const id of sortedIds) {
+            results.push({ id: id, timestamp: this.registry[id].timestamp || 0 });
+        }
+        return results;
+    },
+
     delete: async function(id) {
         await this.init();
         if (this.registry[id]) {

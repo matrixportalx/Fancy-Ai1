@@ -285,10 +285,10 @@ const ContactsApp = {
                     // Just update the State.
                 }
             } else {
-                alert("Imaging module not initialized.");
+                OS.toast("Imaging module not initialized.", 'warning');
             }
         } catch (e) {
-            alert("Avatar generation failed: " + e.message);
+            OS.toast("Avatar generation failed: " + e.message, 'error');
         } finally {
             btn.disabled = false;
             btn.innerText = "✨ Generate Profile Picture";
@@ -306,13 +306,13 @@ const ContactsApp = {
         char.enableRebbit = document.getElementById('editEnableRebbit').checked;
 
         State.save();
-        alert("Character updated!");
+        OS.toast("Character updated!", 'success');
         OS.goBack();
     },
 
     newCharacter: function() {
-        const name = prompt("Character Name:");
-        if (name) {
+        OS.prompt("Character Name:", "", (name) => {
+            if (!name) return;
             const id = 'c' + Date.now();
             State.characters.push({
                 id: id,
@@ -325,50 +325,50 @@ const ContactsApp = {
             });
             State.save();
             this.renderList();
-        }
+        });
     },
 
     delete: function(charId) {
-        if (State.characters.length <= 1) return alert("Must have at least one character.");
-        if (!confirm("Delete this character? Their avatar, session images, and social feed posts will also be removed.")) return;
-
-        // Clean up associated images
-        const char = State.characters.find(c => c.id === charId);
-        if (char) {
-            // Delete avatar from storage
-            if (char.avatar && char.avatar.startsWith('db:') && window.ImageDB) {
-                window.ImageDB.delete(char.avatar.replace('db:', ''));
-            }
-            // Delete session images
-            const session = State.sessions[charId] || [];
-            session.forEach(msg => {
-                if (msg.type === 'image' && msg.text && msg.text.startsWith('db:') && window.ImageDB) {
-                    window.ImageDB.delete(msg.text.replace('db:', ''));
+        if (State.characters.length <= 1) { OS.toast("Must have at least one character.", 'warning'); return; }
+        OS.confirm("Delete this character? Their avatar, session images, and social feed posts will also be removed.", () => {
+            // Clean up associated images
+            const char = State.characters.find(c => c.id === charId);
+            if (char) {
+                // Delete avatar from storage
+                if (char.avatar && char.avatar.startsWith('db:') && window.ImageDB) {
+                    window.ImageDB.delete(char.avatar.replace('db:', ''));
                 }
-                if (msg.type === 'img2img' && window.ImageDB) {
-                    if (msg.source && msg.source.startsWith('db:')) window.ImageDB.delete(msg.source.replace('db:', ''));
-                    if (msg.text && msg.text.startsWith('db:')) window.ImageDB.delete(msg.text.replace('db:', ''));
-                }
-            });
-            // Delete social feed posts images
-            [State.instagramPosts, State.redditPosts, State.xPosts].forEach(posts => {
-                if (posts) {
-                    for (let i = posts.length - 1; i >= 0; i--) {
-                        if (posts[i].charId === charId) {
-                            if (posts[i].image && posts[i].image.startsWith('db:') && window.ImageDB) {
-                                window.ImageDB.delete(posts[i].image.replace('db:', ''));
+                // Delete session images
+                const session = State.sessions[charId] || [];
+                session.forEach(msg => {
+                    if (msg.type === 'image' && msg.text && msg.text.startsWith('db:') && window.ImageDB) {
+                        window.ImageDB.delete(msg.text.replace('db:', ''));
+                    }
+                    if (msg.type === 'img2img' && window.ImageDB) {
+                        if (msg.source && msg.source.startsWith('db:')) window.ImageDB.delete(msg.source.replace('db:', ''));
+                        if (msg.text && msg.text.startsWith('db:')) window.ImageDB.delete(msg.text.replace('db:', ''));
+                    }
+                });
+                // Delete social feed posts images
+                [State.instagramPosts, State.redditPosts, State.xPosts].forEach(posts => {
+                    if (posts) {
+                        for (let i = posts.length - 1; i >= 0; i--) {
+                            if (posts[i].charId === charId) {
+                                if (posts[i].image && posts[i].image.startsWith('db:') && window.ImageDB) {
+                                    window.ImageDB.delete(posts[i].image.replace('db:', ''));
+                                }
+                                posts.splice(i, 1);
                             }
-                            posts.splice(i, 1);
                         }
                     }
-                }
-            });
-        }
+                });
+            }
 
-        State.characters = State.characters.filter(c => c.id !== charId);
-        delete State.sessions[charId];
-        State.save();
-        OS.goBack();
+            State.characters = State.characters.filter(c => c.id !== charId);
+            delete State.sessions[charId];
+            State.save();
+            OS.goBack();
+        });
     }
 };
 

@@ -5,11 +5,14 @@
  */
 const RebbitApp = {
     container: null,
+    _autoPostTimer: null,
+    _autoPosting: false,
 
     init: async function(container) {
         this.container = container;
         this.render();
         await this.loadPosts();
+        this.startAutoPost();
     },
 
     render: function() {
@@ -21,6 +24,7 @@ const RebbitApp = {
                 .rb-wrap { padding: 0; overflow-y: auto; height: 100%; background: #0a0a0b; display: flex; flex-direction: column; padding-bottom: 100px; }
                 .rb-header { background: linear-gradient(135deg, rgba(255,69,0,0.1), rgba(200,50,0,0.05)); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
                 .rb-header h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #ff4500; }
+                .rb-header span { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; animation: pulse 2s infinite; }
                 .rb-controls { padding: 10px 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
                 .rb-btn-gen { padding: 10px 20px; font-size: 0.8rem; background: #ff4500; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(255,69,0,0.3); transition: all 0.2s; }
                 .rb-btn-gen:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(0.5); }
@@ -79,7 +83,7 @@ const RebbitApp = {
         }
         this.container.innerHTML = `
             <div class="rb-wrap">
-                <div class="rb-header"><h2>Rebbit</h2></div>
+                <div class="rb-header"><h2>Rebbit</h2><span id="rbAutoPostIndicator" style="display:none; width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px #22c55e; animation: pulse 2s infinite;"></span></div>
                 <div class="rb-controls">
                     <button class="rb-btn-gen" id="rbGenBtn" onclick="RebbitApp.generatePost()">📸 New Post</button>
                     <button class="rb-btn-clear" onclick="RebbitApp.clearAll()">🗑️ Clear</button>
@@ -252,13 +256,17 @@ getAllCategories: function() {
 
         const eligibleChars = State.characters.filter(c => c.enableRebbit !== false);
         const bot = eligibleChars[Math.floor(Math.random() * eligibleChars.length)];
+        if (!bot) { console.warn("Rebbit: No eligible characters for auto-post"); if (btn) { btn.disabled = false; btn.innerText = "📸 New Post"; } return; }
+        console.log("Rebbit: Generating post for " + bot.name);
 
         const categories = this.getEnabledCategories();
         const category = categories[Math.floor(Math.random() * categories.length)];
 
         try {
             const api = window.API;
-            if (!api || !State.settings.key) {
+            const provider = (State.settings && State.settings.provider) || 'deepinfra';
+            const needsKey = provider !== 'localllm';
+            if (!api || (needsKey && !State.settings.key)) {
                 if (btn) { btn.disabled = false; btn.innerText = "📸 New Post"; }
                 return;
             }
@@ -304,7 +312,8 @@ getAllCategories: function() {
                     title: title,
                     subreddit: subreddit,
                     image: storagePath,
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    comments: []
                 });
                 if (State.redditPosts.length > 50) {
                     const oldPost = State.redditPosts.shift();
@@ -314,6 +323,13 @@ getAllCategories: function() {
                 }
                 State.save();
                 this.loadPosts();
+                // Update home screen badge if user is not in this app
+                if (OS.activeApp !== 'RebbitApp' && OS.updateBadges) OS.updateBadges();
+
+                // Chance for others to comment
+                if (State.characters.length > 1) {
+                    setTimeout(() => this.generateComment(State.redditPosts[State.redditPosts.length-1].id), 5000 + Math.random() * 7000);
+                }
             }
         } catch(e) {
             console.error("Rebbit gen error:", e);
@@ -322,18 +338,44 @@ getAllCategories: function() {
         }
     },
 
-    clearAll: async function() {
-        if (!confirm("Clear all Rebbit posts?")) return;
-        if (window.ImageDB) {
-            for (const p of (State.redditPosts || [])) {
-                if (p.image && p.image.startsWith('db:')) await window.ImageDB.delete(p.image.replace('db:', ''));
+    generateComment: async function(postId) {
+        const post = (State.redditPosts || []).find(p => p.id === postId);
+        if (!post) return;
+        const others = State.characters.filter(c => c.id !== post.charId);
+        if (others.length === 0) return;
+
+        const commenter = others[Math.floor(Math.random() * others.length)];
+        try {
+            const api = window.API;
+            const prompt = `You are a Redditor named ${commenter.name}. You see a new NSFW post on ${post.subreddit} by ${post.charName} titled: "${post.title}". Write a short, thirsty, or playful Reddit comment (max 15 words) as yourself. Output ONLY the comment text.`;
+            const comment = await api.sendMessage(commenter.id, prompt, null, false, 'social');
+            if (comment && comment.length > 1) {
+                if (!post.comments) post.comments = [];
+                post.comments.push({
+                    charId: commenter.id,
+                    charName: commenter.name,
+                    text: comment.trim(),
+                    timestamp: Date.now()
+                });
+                State.save();
+                this.loadPosts();
             }
-        }
-        State.redditPosts = [];
-        State.save();
-        // Trigger orphan cleanup
-        if (window.ImageDB && window.ImageDB.purgeOrphanedFiles) window.ImageDB.purgeOrphanedFiles();
-        this.loadPosts();
+        } catch(e) {}
+    },
+
+    clearAll: function() {
+        OS.confirm("Clear all Rebbit posts?", async () => {
+            if (window.ImageDB) {
+                for (const p of (State.redditPosts || [])) {
+                    if (p.image && p.image.startsWith('db:')) await window.ImageDB.delete(p.image.replace('db:', ''));
+                }
+            }
+            State.redditPosts = [];
+            State.save();
+            // Trigger orphan cleanup
+            if (window.ImageDB && window.ImageDB.purgeOrphanedFiles) window.ImageDB.purgeOrphanedFiles();
+            this.loadPosts();
+        }, { title: 'Clear Feed', confirmText: 'Clear All', danger: true });
     },
 
     loadPosts: async function() {
@@ -363,8 +405,23 @@ getAllCategories: function() {
                 </div>
                 <div class="rb-post-title">${p.title || ''}</div>
                 <img id="${imgId}" class="rb-post-img" src="" alt="">
+                <div id="comments-${p.id}" style="padding-top:10px;"></div>
             `;
             el.appendChild(postDiv);
+
+            // Render Comments
+            const commentsContainer = document.getElementById(`comments-${p.id}`);
+            if (p.comments && p.comments.length > 0) {
+                p.comments.forEach(c => {
+                    const cDiv = document.createElement('div');
+                    cDiv.style.fontSize = '0.82rem';
+                    cDiv.style.marginBottom = '6px';
+                    cDiv.style.paddingLeft = '8px';
+                    cDiv.style.borderLeft = '2px solid #ff4500';
+                    cDiv.innerHTML = `<b style="color:#ff4500; font-size:0.75rem;">u/${c.charName.toLowerCase().replace(/\s/g,'')}</b><br><span style="color:#d1d5db;">${OS.formatMarkdown(c.text)}</span>`;
+                    commentsContainer.appendChild(cDiv);
+                });
+            }
 
             // Resolve image from ImageDB
             this.resolveToElement(p.image, imgId);
@@ -383,7 +440,7 @@ getAllCategories: function() {
         if (el && finalSrc) {
             el.src = finalSrc;
             el.onclick = function() {
-                if (window.ImagingApp) ImagingApp.openLocalLightbox(this.src);
+                if (window.ImagingApp) ImagingApp.openLocalLightbox(finalSrc, src);
             };
         }
     },
@@ -398,9 +455,60 @@ getAllCategories: function() {
         if (el && finalSrc) {
             el.innerHTML = `<img src="${finalSrc}">`;
         }
+    },
+
+    startAutoPost: function() {
+        this.stopAutoPost();
+        const s = State.settings || {};
+        if (!s.autoPostEnabled || !s.autoPostRebbit) return;
+        // Check for API key (not needed for localllm provider)
+        const provider = s.provider || 'deepinfra';
+        if (provider !== 'localllm' && !s.key) return;
+        const interval = (s.autoPostInterval || 5) * 60 * 1000;
+        const jitter = interval * (0.7 + Math.random() * 0.6);
+        // Stagger the first post: wait 0-60s so multiple feeds don't all hit the server at once
+        const initialDelay = Math.floor(Math.random() * 60000);
+        this._autoPostTimer = setTimeout(() => {
+            // After initial delay, switch to regular interval
+            this._autoPostTimer = setInterval(() => {
+                if (this._autoPosting) return;
+                this._autoPosting = true;
+                this.generatePost().finally(() => { this._autoPosting = false; });
+            }, jitter);
+            // Also do the first post now
+            if (!this._autoPosting) {
+                this._autoPosting = true;
+                this.generatePost().finally(() => { this._autoPosting = false; });
+            }
+        }, initialDelay);
+        this.updateAutoPostIndicator();
+    },
+
+    stopAutoPost: function() {
+        if (this._autoPostTimer) {
+            clearInterval(this._autoPostTimer);
+            clearTimeout(this._autoPostTimer);
+            this._autoPostTimer = null;
+        }
+        this._autoPosting = false;
+    },
+
+    updateAutoPostIndicator: function() {
+        const indicator = document.getElementById('rbAutoPostIndicator');
+        if (!indicator) return;
+        const s = State.settings || {};
+        const provider = s.provider || 'deepinfra';
+        const hasKey = provider === 'localllm' || s.key;
+        if (s.autoPostEnabled && s.autoPostRebbit && hasKey) {
+            indicator.style.display = 'inline-block';
+            indicator.title = `Auto-posting every ${s.autoPostInterval || 5} min`;
+        } else {
+            indicator.style.display = 'none';
+        }
+    },
+
+    cleanup: function() {
+        this.stopAutoPost();
     }
 };
 window.RebbitApp = RebbitApp;
-
-
-

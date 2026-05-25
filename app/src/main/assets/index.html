@@ -38,43 +38,14 @@
             color: var(--text-main);
         }
 
-        /* --- Global Markdown Styles --- */
-        b, strong { font-weight: 700; color: #fff; }
-        i, em { font-style: italic; opacity: 0.9; }
-
-        @keyframes float {
-            0%, 100% { transform: translateY(0px) rotate(0deg); }
-            33% { transform: translateY(-10px) rotate(1deg); }
-            66% { transform: translateY(5px) rotate(-1deg); }
-        }
-
-        @keyframes pulse-glow {
-            0%, 100% { opacity: 0.5; transform: scale(1); }
-            50% { opacity: 1; transform: scale(1.05); }
-        }
-
-        @keyframes fadeInUp {
-            from { opacity: 0; transform: translateY(20px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes shimmer {
-            0% { background-position: -200% center; }
-            100% { background-position: 200% center; }
-        }
-
-        @keyframes gradientShift {
-            0% { background-position: 0% 50%; }
-            50% { background-position: 100% 50%; }
-            100% { background-position: 0% 50%; }
-        }
-
         #os-container {
             width: 100vw;
             height: 100dvh;
             display: flex;
             flex-direction: column;
             overflow: hidden;
+            padding-left: env(safe-area-inset-left);
+            padding-right: env(safe-area-inset-right);
         }
 
         #home-screen {
@@ -86,6 +57,8 @@
             width: 100%;
             position: relative;
             overflow: hidden;
+            padding-top: env(safe-area-inset-top);
+            padding-bottom: env(safe-area-inset-bottom);
         }
 
         #home-screen::before {
@@ -125,6 +98,69 @@
             position: relative;
             z-index: 1;
             animation: fadeInUp 0.8s ease 0.1s both;
+        }
+
+        /* --- Status Bar --- */
+        .os-status-bar {
+            width: 100%;
+            max-width: 420px;
+            padding: 8px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            position: relative;
+            z-index: 1;
+            animation: fadeInUp 0.6s ease;
+            margin-bottom: 12px;
+        }
+        .os-status-time {
+            font-size: 0.85rem;
+            font-weight: 700;
+            color: var(--text-main);
+            letter-spacing: 0.5px;
+        }
+        .os-status-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .os-status-pill {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 3px 8px;
+            border-radius: 10px;
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+        }
+        .os-status-pill.pill-chars {
+            background: rgba(139, 92, 246, 0.12);
+            color: #a78bfa;
+            border: 1px solid rgba(139, 92, 246, 0.2);
+        }
+        .os-status-pill.pill-autopost {
+            background: rgba(34, 197, 94, 0.1);
+            color: #22c55e;
+            border: 1px solid rgba(34, 197, 94, 0.2);
+        }
+        .os-status-pill.pill-autopost.inactive {
+            background: rgba(255, 255, 255, 0.04);
+            color: var(--text-muted);
+            border: 1px solid rgba(255, 255, 255, 0.06);
+        }
+        .os-status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: #22c55e;
+            box-shadow: 0 0 4px #22c55e;
+            animation: pulse 2s infinite;
+        }
+        .os-status-dot.inactive {
+            background: var(--text-muted);
+            box-shadow: none;
+            animation: none;
         }
 
         .app-grid {
@@ -190,6 +226,51 @@
             letter-spacing: 0.3px;
         }
 
+        /* --- Notification Badges --- */
+        .app-icon-wrapper {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .app-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
+            border-radius: 10px;
+            background: var(--danger);
+            color: white;
+            font-size: 0.65rem;
+            font-weight: 800;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5);
+            animation: badgePop 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            pointer-events: none;
+        }
+        .app-badge.badge-dot {
+            min-width: 10px;
+            width: 10px;
+            height: 10px;
+            padding: 0;
+            top: -2px;
+            right: -2px;
+            border-radius: 50%;
+        }
+        .app-badge.badge-hidden {
+            display: none;
+        }
+        @keyframes badgePop {
+            0% { transform: scale(0); }
+            100% { transform: scale(1); }
+        }
+
         #app-window {
             display: none;
             flex: 1;
@@ -238,13 +319,22 @@
 
 <div id="os-container">
     <div id="home-screen">
+        <div class="os-status-bar">
+            <div class="os-status-right">
+                <span class="os-status-pill pill-chars" id="osStatusChars">👤 1</span>
+                <span class="os-status-pill pill-autopost inactive" id="osStatusAutoPost"><span class="os-status-dot inactive" id="osStatusDot"></span>Auto</span>
+            </div>
+        </div>
         <div class="home-title">FANCY AI</div>
         <div class="home-subtitle">Virtual Intelligence OS</div>
+        <div id="homeAutoPostBadge" style="display:none; margin-bottom:20px; padding:4px 12px; background:rgba(34,197,94,0.1); border:1px solid rgba(34,197,94,0.2); border-radius:20px; font-size:0.7rem; color:#22c55e; font-weight:600; letter-spacing:0.5px; position:relative; z-index:1;">
+            🟢 Auto-Post Active
+        </div>
         <div class="app-grid">
-            <button class="app-icon" onclick="OS.launch('MessengerApp')"><span class="icon-box">💬</span><span>Chat</span></button>
-            <button class="app-icon" onclick="OS.launch('UstagramApp')"><span class="icon-box">📸</span><span>Ustagram</span></button>
-            <button class="app-icon" onclick="OS.launch('RebbitApp')"><span class="icon-box">🔞</span><span>Rebbit</span></button>
-            <button class="app-icon" onclick="OS.launch('YApp')"><span class="icon-box">✕</span><span>Y</span></button>
+            <button class="app-icon" onclick="OS.launch('MessengerApp')"><div class="app-icon-wrapper"><span class="icon-box">💬</span><span class="app-badge badge-hidden" id="badge-MessengerApp">0</span></div><span>Chat</span></button>
+            <button class="app-icon" onclick="OS.launch('UstagramApp')"><div class="app-icon-wrapper"><span class="icon-box">📸</span><span class="app-badge badge-hidden" id="badge-UstagramApp">0</span></div><span>Ustagram</span></button>
+            <button class="app-icon" onclick="OS.launch('RebbitApp')"><div class="app-icon-wrapper"><span class="icon-box">🔞</span><span class="app-badge badge-hidden" id="badge-RebbitApp">0</span></div><span>Rebbit</span></button>
+            <button class="app-icon" onclick="OS.launch('YApp')"><div class="app-icon-wrapper"><span class="icon-box">✕</span><span class="app-badge badge-hidden" id="badge-YApp">0</span></div><span>Y</span></button>
             <button class="app-icon" onclick="OS.launch('ImagingApp')"><span class="icon-box">🎨</span><span>Imaging</span></button>
             <button class="app-icon" onclick="OS.launch('GalleryApp')"><span class="icon-box">🖼️</span><span>Gallery</span></button>
             <button class="app-icon" onclick="OS.launch('ContactsApp')"><span class="icon-box">👤</span><span>Chars</span></button>
@@ -255,7 +345,7 @@
 
     <div id="app-window">
         <div class="os-nav-header">
-            <button onclick="OS.goHome()" class="btn-back">← Home</button>
+            <button onclick="OS.goBack()" class="btn-back">← Back</button>
             <strong id="os-app-title" style="color:white; font-size:1.05rem;">Application</strong>
             <div style="width:50px;"></div>
         </div>
@@ -295,6 +385,9 @@
             document.getElementById('app-window').style.display = 'flex';
             document.getElementById('os-app-title').innerText = appName.replace('App', '');
 
+            // Mark app as read when user opens it
+            this.markAppRead(appName);
+
             // Clear in-app nav stack when launching a new app
             this.navStack = [];
             history.pushState({ app: appName }, "", `#${appName}`);
@@ -307,6 +400,18 @@
             } else {
                 slot.innerHTML = `<div style="padding:30px; text-align:center; color:var(--text-muted);">App reference error [${appName}].</div>`;
             }
+
+            // API key warning for apps that need LLM access
+            const llmApps = ['MessengerApp', 'UstagramApp', 'RebbitApp', 'YApp'];
+            if (llmApps.includes(appName)) {
+                const provider = (State.settings && State.settings.provider) || 'deepinfra';
+                const needsKey = provider !== 'localllm';
+                if (needsKey && (!State.settings || !State.settings.key)) {
+                    setTimeout(() => {
+                        this.toast("⚠️ No API key set — open Settings to configure", 'warning');
+                    }, 500);
+                }
+            }
         },
 
         // Push an in-app view onto the nav stack for back navigation
@@ -317,23 +422,67 @@
             }
         },
 
+        // Close any open app overlay (settings panels, modals, etc.)
+        // Returns true if an overlay was closed
+        closeTopOverlay: function() {
+            // Check for imaging lightbox first (highest priority — it's z-index 99999)
+            const lightbox = document.getElementById('imagingModuleLightboxModal');
+            if (lightbox && lightbox.style.display === 'flex') {
+                // Pass true to prevent history.back() — the OS already consumed the back navigation
+                if (window.ImagingApp) ImagingApp.closeLocalLightbox(true);
+                return true;
+            }
+            // Check for app-level overlays (settings panels, memory viewer, etc.)
+            // These are appended to body with high z-index, but are NOT os-modal-overlay (OS.confirm/prompt)
+            const appOverlays = document.querySelectorAll(
+                '.rb-settings-overlay, .ug-settings-overlay, .y-settings-overlay, #memoryOverlay, #charSelectorPopup'
+            );
+            for (const overlay of appOverlays) {
+                if (overlay.parentNode) { overlay.remove(); return true; }
+            }
+            return false;
+        },
+
         // Navigate back within the app, or go home
         goBack: function() {
+            // If we're already on the home screen, let the native exit handler take over
+            if (!this.activeApp) {
+                this._nativeExit();
+                return;
+            }
+
+            // Close any visible overlays first
+            if (this.closeTopOverlay()) return;
+
+            // If there's an in-app view (folder/settings) open, use history.back()
+            // The popstate listener will handle popping the navStack and calling the restoreFn
             if (this.navStack.length > 0) {
-                const prev = this.navStack.pop();
-                if (prev && typeof prev.restore === 'function') {
-                    prev.restore();
-                }
-                // Remove our pushed state
-                if (window.history.state && window.history.state.appView) {
-                    history.back();
-                }
+                window.history.back();
             } else {
+                // Otherwise, the app is at its root, so go home
                 this.goHome();
             }
         },
 
+        // Signal the native Android layer to show exit confirmation
+        _nativeExit: function() {
+            // On Android, the native back handler will show exit dialog if canGoBack() is false
+            // Since we're delegating to JS now, we need to explicitly request exit
+            if (window.AndroidBridge && typeof window.AndroidBridge.requestExit === 'function') {
+                window.AndroidBridge.requestExit();
+            } else {
+                // Fallback: use history.back() which will trigger the native exit dialog
+                // or just go back in browser history
+                if (window.history.length > 1) {
+                    window.history.back();
+                }
+            }
+        },
+
         goHome: function() {
+            // Close any open app overlays first
+            this.closeTopOverlay();
+
             // Cleanup the active app's timer before going home
             if (this.activeApp && window[this.activeApp] && typeof window[this.activeApp].cleanup === 'function') {
                 window[this.activeApp].cleanup();
@@ -342,44 +491,439 @@
             this.navStack = [];
             document.getElementById('app-window').style.display = 'none';
             document.getElementById('home-screen').style.display = 'flex';
-            if(location.hash) history.replaceState(null, "", " ");
+            this.updateAutoPostBadge();
+            this.updateBadges();
+            this.updateStatusBar();
+            // Start background auto-post timers when returning to home screen
+            this.startBackgroundAutoPost();
+
+            // Clean up history/hash if we are not already at home state
+            if (location.hash || (history.state && !history.state.home)) {
+                history.replaceState({ home: true }, "", " ");
+            }
+        },
+
+        // Start background auto-post timers for social apps that aren't currently active
+        // This ensures auto-posting works even when the user is on the home screen
+        startBackgroundAutoPost: function() {
+            const s = State.settings || {};
+            const provider = s.provider || 'deepinfra';
+            const hasKey = provider === 'localllm' || s.key;
+            if (!s.autoPostEnabled || !hasKey) {
+                console.log("Auto-post not starting: enabled=" + s.autoPostEnabled + " hasKey=" + hasKey + " provider=" + provider);
+                return;
+            }
+
+            const apps = [];
+            // Start auto-post for apps that aren't currently active (active app handles its own)
+            if (this.activeApp !== 'UstagramApp' && s.autoPostUstagram && window.UstagramApp) {
+                UstagramApp.startAutoPost();
+                apps.push('Ustagram');
+            }
+            if (this.activeApp !== 'RebbitApp' && s.autoPostRebbit && window.RebbitApp) {
+                RebbitApp.startAutoPost();
+                apps.push('Rebbit');
+            }
+            if (this.activeApp !== 'YApp' && s.autoPostY && window.YApp) {
+                YApp.startAutoPost();
+                apps.push('Y');
+            }
+            if (apps.length > 0) {
+                console.log("Background auto-post started for: " + apps.join(', ') + " (interval: " + (s.autoPostInterval || 5) + "min)");
+            }
+        },
+
+        updateAutoPostBadge: function() {
+            const badge = document.getElementById('homeAutoPostBadge');
+            if (!badge) return;
+            const s = State.settings || {};
+            const provider = s.provider || 'deepinfra';
+            const hasKey = provider === 'localllm' || s.key;
+            const anyEnabled = s.autoPostEnabled && (s.autoPostUstagram || s.autoPostRebbit || s.autoPostY) && hasKey;
+            badge.style.display = anyEnabled ? 'block' : 'none';
+            if (anyEnabled) {
+                const apps = [];
+                if (s.autoPostUstagram) apps.push('📸');
+                if (s.autoPostRebbit) apps.push('🔞');
+                if (s.autoPostY) apps.push('✕');
+                badge.innerHTML = `🟢 Auto-Post Active · ${apps.join(' ')} · ${s.autoPostInterval || 5}min`;
+            }
+        },
+
+        // --- Status Bar ---
+        updateStatusBar: function() {
+            // Update character count
+            const charsEl = document.getElementById('osStatusChars');
+            if (charsEl) {
+                const count = (State.characters || []).length;
+                charsEl.textContent = `👤 ${count}`;
+            }
+
+            // Update auto-post status
+            const autoEl = document.getElementById('osStatusAutoPost');
+            if (autoEl) {
+                const s = State.settings || {};
+                const provider = s.provider || 'deepinfra';
+                const hasKey = provider === 'localllm' || s.key;
+                const anyEnabled = s.autoPostEnabled && (s.autoPostUstagram || s.autoPostRebbit || s.autoPostY) && hasKey;
+                if (anyEnabled) {
+                    autoEl.classList.remove('inactive');
+                    const apps = [];
+                    if (s.autoPostUstagram) apps.push('📸');
+                    if (s.autoPostRebbit) apps.push('🔞');
+                    if (s.autoPostY) apps.push('✕');
+                    autoEl.innerHTML = `<span class="os-status-dot" id="osStatusDot"></span>${apps.join('')}`;
+                } else {
+                    autoEl.classList.add('inactive');
+                    autoEl.innerHTML = `<span class="os-status-dot inactive" id="osStatusDot"></span>Auto`;
+                }
+            }
+        },
+
+        // --- Notification Badge System ---
+        // Computes unread counts for each app and updates badge visibility
+        updateBadges: function() {
+            if (!State.lastReadTimestamps) State.lastReadTimestamps = {};
+            const ts = State.lastReadTimestamps;
+
+            // MessengerApp: count AI messages across all sessions newer than last read
+            let unreadChat = 0;
+            for (const charId in State.sessions) {
+                const session = State.sessions[charId] || [];
+                const lastRead = ts['MessengerApp'] || 0;
+                for (const msg of session) {
+                    if ((msg.role === 'assistant' || msg.sender === 'ai') && msg.timestamp && msg.timestamp > lastRead) {
+                        unreadChat++;
+                    }
+                }
+            }
+            this._setBadge('MessengerApp', unreadChat);
+
+            // UstagramApp: count posts newer than last read
+            const ugLastRead = ts['UstagramApp'] || 0;
+            const unreadUg = (State.instagramPosts || []).filter(p => p.timestamp && p.timestamp > ugLastRead).length;
+            this._setBadge('UstagramApp', unreadUg);
+
+            // RebbitApp: count posts newer than last read
+            const rbLastRead = ts['RebbitApp'] || 0;
+            const unreadRb = (State.redditPosts || []).filter(p => p.timestamp && p.timestamp > rbLastRead).length;
+            this._setBadge('RebbitApp', unreadRb);
+
+            // YApp: count posts newer than last read
+            const yLastRead = ts['YApp'] || 0;
+            const unreadY = (State.xPosts || []).filter(p => p.timestamp && p.timestamp > yLastRead).length;
+            this._setBadge('YApp', unreadY);
+        },
+
+        // Set or hide a badge on a home screen icon
+        _setBadge: function(appName, count) {
+            const badge = document.getElementById('badge-' + appName);
+            if (!badge) return;
+            if (count <= 0) {
+                badge.classList.add('badge-hidden');
+                badge.classList.remove('badge-dot');
+            } else if (count === 1) {
+                badge.classList.remove('badge-hidden');
+                badge.classList.add('badge-dot');
+                badge.textContent = '';
+            } else {
+                badge.classList.remove('badge-hidden', 'badge-dot');
+                badge.textContent = count > 99 ? '99+' : count;
+            }
+        },
+
+        // Mark an app as read (called when user opens the app)
+        markAppRead: function(appName) {
+            // Only track read timestamps for badge-enabled apps
+            const badgeApps = ['MessengerApp', 'UstagramApp', 'RebbitApp', 'YApp'];
+            if (!badgeApps.includes(appName)) return;
+            if (!State.lastReadTimestamps) State.lastReadTimestamps = {};
+            State.lastReadTimestamps[appName] = Date.now();
+            State.save();
+            this._setBadge(appName, 0);
         },
 
         formatMarkdown: function(text) {
             if (!text) return "";
-            // Simple Markdown parsing: **bold**, *italic*
-            return text
-                .replace(/\*\*\*(.*?)\*\*\*/g, '<b><i>$1</i></b>')
-                .replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')
-                .replace(/\*(.*?)\*/g, '<i>$1</i>')
-                .replace(/__(.*?)__/g, '<b>$1</b>')
-                .replace(/_(.*?)_/g, '<i>$1</i>');
+            // Escape HTML to prevent injection
+            let html = text
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            // Code blocks: ```code``` → <pre><code>
+            html = html.replace(/```([\s\S]*?)```/g, '<pre style="background:rgba(255,255,255,0.04);padding:10px;border-radius:8px;overflow-x:auto;font-size:0.82rem;margin:6px 0;border:1px solid var(--border);"><code>$1</code></pre>');
+
+            // Inline code: `code` → <code>
+            html = html.replace(/`([^`]+)`/g, '<code style="background:rgba(255,255,255,0.06);padding:2px 6px;border-radius:4px;font-size:0.85rem;">$1</code>');
+
+            // Links: [text](url) → <a>
+            html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" style="color:var(--accent);text-decoration:underline;" target="_blank">$1</a>');
+
+            // Headers: # H1, ## H2, ### H3 (at start of line)
+            html = html.replace(/^### (.+)$/gm, '<div style="font-size:1rem;font-weight:800;color:white;margin:8px 0 4px;">$1</div>');
+            html = html.replace(/^## (.+)$/gm, '<div style="font-size:1.1rem;font-weight:800;color:white;margin:10px 0 4px;">$1</div>');
+            html = html.replace(/^# (.+)$/gm, '<div style="font-size:1.2rem;font-weight:900;color:white;margin:12px 0 4px;">$1</div>');
+
+            // Horizontal rules: --- or *** on their own line
+            html = html.replace(/^(\*{3,}|-{3,})$/gm, '<hr style="border:none;border-top:1px solid var(--border);margin:10px 0;">');
+
+            // Bold + Italic: ***text***
+            html = html.replace(/\*\*\*(.*?)\*\*\*/g, '<b><i>$1</i></b>');
+            // Bold: **text**
+            html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
+            // Italic: *text*
+            html = html.replace(/\*(.*?)\*/g, '<i>$1</i>');
+            // Underline bold: __text__
+            html = html.replace(/__(.*?)__/g, '<b>$1</b>');
+            // Underline italic: _text_ (only single underscores, not in words)
+            html = html.replace(/(?<!\w)_(.*?)_(?!\w)/g, '<i>$1</i>');
+
+            // Strikethrough: ~~text~~
+            html = html.replace(/~~(.*?)~~/g, '<span style="text-decoration:line-through;opacity:0.6;">$1</span>');
+
+            // Unordered lists: lines starting with - or *
+            html = html.replace(/^[-*] (.+)$/gm, '<div style="padding-left:16px;position:relative;"><span style="position:absolute;left:4px;color:var(--text-muted);">•</span>$1</div>');
+
+            // Ordered lists: lines starting with 1. 2. etc.
+            html = html.replace(/^(\d+)\. (.+)$/gm, '<div style="padding-left:20px;"><span style="color:var(--text-muted);margin-right:4px;">$1.</span>$2</div>');
+
+            // Line breaks: \n → <br> (but not inside <pre> blocks)
+            html = html.replace(/\n/g, '<br>');
+
+            return html;
         },
 
-        notify: function(msg) {
-            alert(msg);
+        // --- Voice System ---
+        speak: function(text) {
+            if (window.AndroidBridge && typeof window.AndroidBridge.speak === 'function') {
+                window.AndroidBridge.speak(text);
+            }
+        },
+        stopSpeaking: function() {
+            if (window.AndroidBridge && typeof window.AndroidBridge.stopSpeaking === 'function') {
+                window.AndroidBridge.stopSpeaking();
+            }
+        },
+        listen: function(onResult, onStatus) {
+            this._speechResultCallback = onResult;
+            this._speechStatusCallback = onStatus;
+            if (window.AndroidBridge && typeof window.AndroidBridge.startListening === 'function') {
+                window.AndroidBridge.startListening();
+            }
+        },
+        stopListening: function() {
+            if (window.AndroidBridge && typeof window.AndroidBridge.stopListening === 'function') {
+                window.AndroidBridge.stopListening();
+            }
+        },
+        _onSpeechResult: function(text) {
+            if (this._speechResultCallback) this._speechResultCallback(text);
+        },
+        _onSpeechEvent: function(event, code) {
+            if (this._speechStatusCallback) this._speechStatusCallback(event, code);
+        },
+
+        // --- Native Notification ---
+        showNotification: function(title, message, charId) {
+            if (window.AndroidBridge && typeof window.AndroidBridge.showNotification === 'function') {
+                window.AndroidBridge.showNotification(title, message, charId || "");
+            }
+        },
+
+        notify: function(msg, type) {
+            this.toast(msg, type);
+        },
+
+        // --- Toast Notification ---
+        toast: function(msg, type) {
+            let container = document.getElementById('os-toast-container');
+            if (!container) {
+                container = document.createElement('div');
+                container.id = 'os-toast-container';
+                document.body.appendChild(container);
+            }
+            const t = document.createElement('div');
+            t.className = 'os-toast' + (type ? ` toast-${type}` : '');
+            t.textContent = msg;
+            container.appendChild(t);
+            setTimeout(() => { if (t.parentNode) t.remove(); }, 2600);
+        },
+
+        // --- Confirm Modal (replaces confirm()) ---
+        // Usage: OS.confirm("Delete this?", () => { /* on confirm */ })
+        confirm: function(message, onConfirm, opts) {
+            opts = opts || {};
+            const title = opts.title || 'Confirm';
+            const confirmText = opts.confirmText || 'Confirm';
+            const danger = opts.danger || false;
+
+            const overlay = document.createElement('div');
+            overlay.className = 'os-modal-overlay';
+            overlay.innerHTML = `
+                <div class="os-modal-sheet">
+                    <div class="os-modal-title">${title}</div>
+                    <div class="os-modal-body">${message}</div>
+                    <div class="os-modal-actions">
+                        <button class="os-modal-btn os-modal-btn-cancel" id="osConfirmCancel">Cancel</button>
+                        <button class="os-modal-btn ${danger ? 'os-modal-btn-danger' : 'os-modal-btn-confirm'}" id="osConfirmOk">${confirmText}</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+
+            overlay.querySelector('#osConfirmCancel').onclick = () => overlay.remove();
+            overlay.querySelector('#osConfirmOk').onclick = () => { overlay.remove(); if (onConfirm) onConfirm(); };
+            overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+        },
+
+        // --- Prompt Modal (replaces prompt()) ---
+        // Usage: OS.prompt("Enter name:", "default", (value) => { /* use value */ })
+        prompt: function(message, defaultValue, onConfirm) {
+            const overlay = document.createElement('div');
+            overlay.className = 'os-modal-overlay';
+            overlay.innerHTML = `
+                <div class="os-modal-sheet">
+                    <div class="os-modal-title">${message}</div>
+                    <input class="os-modal-input" id="osPromptInput" value="${defaultValue || ''}">
+                    <div class="os-modal-actions">
+                        <button class="os-modal-btn os-modal-btn-cancel" id="osPromptCancel">Cancel</button>
+                        <button class="os-modal-btn os-modal-btn-confirm" id="osPromptOk">OK</button>
+                    </div>
+                </div>
+            `;
+            document.body.appendChild(overlay);
+
+            const input = overlay.querySelector('#osPromptInput');
+            input.focus();
+            input.select();
+
+            const submit = () => { const val = input.value.trim(); overlay.remove(); if (onConfirm) onConfirm(val || null); };
+            const cancel = () => { overlay.remove(); if (onConfirm) onConfirm(null); };
+
+            overlay.querySelector('#osPromptCancel').onclick = cancel;
+            overlay.querySelector('#osPromptOk').onclick = submit;
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); });
+            overlay.onclick = (e) => { if (e.target === overlay) cancel(); };
+        }
+    };
+
+    const Autonomous = {
+        _timer: null,
+        init: function() {
+            // Run every 15 minutes
+            this._timer = setInterval(() => this.tick(), 15 * 60 * 1000);
+            console.log("Autonomous Lifecycle System: Active");
+        },
+        tick: async function() {
+            const s = State.settings || {};
+            const provider = s.provider || 'deepinfra';
+            const hasKey = provider === 'localllm' || s.key;
+            if (!s.autonomousEnabled || !hasKey || State.characters.length === 0) return;
+
+            // Pick a random character
+            const bot = State.characters[Math.floor(Math.random() * State.characters.length)];
+
+            // Chance of action
+            const rand = Math.random();
+            if (rand < 0.4) { // 40% chance of a "thought"
+                this.generateMonologue(bot);
+            } else if (rand < 0.6) { // 20% chance of a "message" (if user away)
+                this.checkMessageUser(bot);
+            }
+        },
+        generateMonologue: async function(bot) {
+            try {
+                const api = window.API;
+                const prompt = `You are ${bot.name}. Write a short internal monologue (1-2 sentences) about your current mood, a random thought, or something you're curious about. This is for your private journal. Be completely in character.`;
+                const thought = await api.sendMessage(bot.id, prompt, null, false, 'chat');
+                if (thought && thought.length > 5) {
+                    if (!State.monologues) State.monologues = {};
+                    if (!State.monologues[bot.id]) State.monologues[bot.id] = [];
+                    State.monologues[bot.id].push({ text: thought.trim(), timestamp: Date.now() });
+                    if (State.monologues[bot.id].length > 20) State.monologues[bot.id].shift();
+                    State.save();
+                    console.log(`[Autonomous] ${bot.name} had a thought.`);
+                }
+            } catch(e) {}
+        },
+        checkMessageUser: async function(bot) {
+            // Only message if the app is NOT active or in background
+            // And only if it's been a while since the last message in that chat
+            const session = State.sessions[bot.id] || [];
+            if (session.length === 0) return;
+            const lastMsg = session[session.length - 1];
+            const diff = Date.now() - lastMsg.timestamp;
+
+            // If it's been more than 2 hours
+            if (diff > 2 * 60 * 60 * 1000) {
+                try {
+                    const api = window.API;
+                    const prompt = `You are ${bot.name}. It's been a while since you last spoke to the user. Send a short, natural check-in message (max 15 words) based on your persona. Don't be needy, just be yourself.`;
+                    const msgText = await api.sendMessage(bot.id, prompt, null, true, 'chat');
+                    if (msgText && msgText.length > 5) {
+                        const msg = { id: 'm'+Date.now(), sender: 'ai', text: msgText.trim(), timestamp: Date.now() };
+                        State.sessions[bot.id].push(msg);
+                        State.save();
+                        OS.showNotification(bot.name, msgText.trim(), bot.id);
+                        if (OS.activeApp === 'MessengerApp' && MessengerApp.activeCharId === bot.id) {
+                            MessengerApp.renderChatLog();
+                        } else {
+                            OS.updateBadges();
+                        }
+                    }
+                } catch(e) {}
+            }
         }
     };
 
     window.addEventListener('popstate', function(event) {
-        // If Imaging lightbox is open, it handles its own popstate (see imaging.js)
+        const state = event.state || {};
+
+        // 1. Check for Imaging lightbox first
+        if (window.ImagingApp && typeof ImagingApp.handlePopState === 'function') {
+            // Handled in capture phase usually
+        }
         
-        // If we have in-app nav stack entries, pop back in the app
+        // 2. If an app overlay is open (settings, etc), close it
+        if (OS.closeTopOverlay()) {
+            if (OS.activeApp) history.pushState({ app: OS.activeApp }, "", `#${OS.activeApp}`);
+            return;
+        }
+
+        // 3. Handle in-app view navigation (like Gallery folders)
         if (OS.navStack.length > 0) {
             const prev = OS.navStack.pop();
             if (prev && typeof prev.restore === 'function') {
                 prev.restore();
+                // CRITICAL: Push the app state back so the NEXT back press knows we are still in the app
+                history.replaceState({ app: OS.activeApp }, "", `#${OS.activeApp}`);
                 return;
             }
         }
-        if (!event.state || !event.state.app) {
+
+        // 4. Go home if we've run out of app-specific history
+        if (OS.activeApp && (!state.app || state.app !== OS.activeApp)) {
             OS.goHome();
         }
     });
 
     // Start background autonomous activity on boot
-    window.addEventListener('load', () => {
-        // Each social app manages its own autonomous timer when opened
+    // Wait for State to finish loading from disk before starting auto-post
+    window.addEventListener('load', async () => {
+        // Ensure the initial page load has a history state for the home screen
+        if (!history.state) {
+            history.replaceState({ home: true }, "", " ");
+        }
+
+        // Ensure State has loaded from disk (AndroidBridge.readFile is sync but init() is async)
+        if (window._stateReady) await window._stateReady;
+        OS.updateAutoPostBadge();
+        OS.updateBadges();
+        OS.updateStatusBar();
+        // Start background auto-post timers on boot (user starts on home screen)
+        OS.startBackgroundAutoPost();
+        Autonomous.init();
         console.log("Fancy AI OS ready. Apps: Ustagram, Rebbit, Y");
     });
 </script>

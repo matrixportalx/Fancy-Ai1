@@ -4,11 +4,14 @@
  */
 const YApp = {
     container: null,
+    _autoPostTimer: null,
+    _autoPosting: false,
 
     init: function(container) {
         this.container = container;
         this.render();
         this.loadPosts();
+        this.startAutoPost();
     },
 
     render: function() {
@@ -20,6 +23,7 @@ const YApp = {
                 .y-wrap { padding: 0; overflow-y: auto; height: 100%; background: #0a0a0b; display: flex; flex-direction: column; padding-bottom: 100px; }
                 .y-header { background: rgba(29,161,242,0.08); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
                 .y-header h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #1da1f2; }
+                .y-header span { display: none; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; animation: pulse 2s infinite; }
                 .y-controls { padding: 10px 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
                 .y-btn-gen { padding: 10px 20px; font-size: 0.8rem; background: #1da1f2; color: white; border: none; border-radius: 20px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(29,161,242,0.3); transition: all 0.2s; }
                 .y-btn-gen:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(0.5); }
@@ -40,7 +44,7 @@ const YApp = {
         }
         this.container.innerHTML = `
             <div class="y-wrap">
-                <div class="y-header"><h2>Y</h2></div>
+                <div class="y-header"><h2>Y</h2><span id="yAutoPostIndicator" style="display:none; width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px #22c55e; animation: pulse 2s infinite;"></span></div>
                 <div class="y-controls">
                     <button class="y-btn-gen" id="yBtnGen" onclick="YApp.generatePost()">🐦 New Post</button>
                     <button class="y-btn-clear" onclick="YApp.clearAll()">🗑️ Clear</button>
@@ -140,6 +144,8 @@ const YApp = {
         if (btn) { btn.disabled = true; btn.innerText = "⏳ Generating..."; }
 
         const bot = State.characters[Math.floor(Math.random() * State.characters.length)];
+        if (!bot) { console.warn("Y: No characters available for auto-post"); if (btn) { btn.disabled = false; btn.innerText = "🐦 New Post"; } return; }
+        console.log("Y: Generating post for " + bot.name);
 
         // Diverse post categories for variety
         const categories = [
@@ -162,7 +168,9 @@ const YApp = {
         try {
             let text = "Hello world";
             const api = window.API;
-            if (api && State.settings.key) {
+            const provider = (State.settings && State.settings.provider) || 'deepinfra';
+            const hasKey = provider === 'localllm' || State.settings.key;
+            if (api && hasKey) {
                 try {
                     const msg = await api.sendMessage(bot.id, `You are posting on Y (a Twitter-like platform). ${category.prompt} Write a short, engaging status update that fits your personality perfectly. Max 20 words. No hashtags. No emojis unless they are essential. Output only the post text.`, null, false, 'social');
                     if (msg && msg.length > 5) {
@@ -184,7 +192,8 @@ const YApp = {
             if (State.xPosts.length > 50) State.xPosts.shift();
             State.save();
             this.loadPosts();
-
+            // Update home screen badge if user is not in this app
+            if (OS.activeApp !== 'YApp' && OS.updateBadges) OS.updateBadges();
             if (State.characters.length > 1) {
                 setTimeout(() => this.generateReply(post.id), 3000 + Math.random() * 5000);
             }
@@ -204,7 +213,9 @@ const YApp = {
 
         const doAiReply = async () => {
             const api = window.API;
-            if (api && State.settings.key) {
+            const provider = (State.settings && State.settings.provider) || 'deepinfra';
+            const hasKey = provider === 'localllm' || State.settings.key;
+            if (api && hasKey) {
                 try {
                     const msg = await api.sendMessage(replier.id, `You are ${replier.name}. Persona: ${replier.persona}. Reply to this tweet from ${post.charName} naturally: "${post.text}". The reply MUST reflect your unique Persona. Max 12 words. Output ONLY the reply text.`, null, false, 'social');
                     if (msg && msg.length > 3) {
@@ -229,10 +240,65 @@ const YApp = {
     },
 
     clearAll: function() {
-        if (!confirm("Clear all Y posts?")) return;
-        State.xPosts = [];
-        State.save();
-        this.loadPosts();
+        OS.confirm("Clear all Y posts?", () => {
+            State.xPosts = [];
+            State.save();
+            this.loadPosts();
+        }, { title: 'Clear Feed', confirmText: 'Clear All', danger: true });
+    },
+
+    cleanup: function() {
+        this.stopAutoPost();
+    },
+
+    startAutoPost: function() {
+        this.stopAutoPost();
+        const s = State.settings || {};
+        if (!s.autoPostEnabled || !s.autoPostY) return;
+        // Check for API key (not needed for localllm provider)
+        const provider = s.provider || 'deepinfra';
+        if (provider !== 'localllm' && !s.key) return;
+        const interval = (s.autoPostInterval || 5) * 60 * 1000;
+        const jitter = interval * (0.7 + Math.random() * 0.6);
+        // Stagger the first post: wait 0-60s so multiple feeds don't all hit the server at once
+        const initialDelay = Math.floor(Math.random() * 60000);
+        this._autoPostTimer = setTimeout(() => {
+            // After initial delay, switch to regular interval
+            this._autoPostTimer = setInterval(() => {
+                if (this._autoPosting) return;
+                this._autoPosting = true;
+                this.generatePost().finally(() => { this._autoPosting = false; });
+            }, jitter);
+            // Also do the first post now
+            if (!this._autoPosting) {
+                this._autoPosting = true;
+                this.generatePost().finally(() => { this._autoPosting = false; });
+            }
+        }, initialDelay);
+        this.updateAutoPostIndicator();
+    },
+
+    stopAutoPost: function() {
+        if (this._autoPostTimer) {
+            clearInterval(this._autoPostTimer);
+            clearTimeout(this._autoPostTimer);
+            this._autoPostTimer = null;
+        }
+        this._autoPosting = false;
+    },
+
+    updateAutoPostIndicator: function() {
+        const indicator = document.getElementById('yAutoPostIndicator');
+        if (!indicator) return;
+        const s = State.settings || {};
+        const provider = s.provider || 'deepinfra';
+        const hasKey = provider === 'localllm' || s.key;
+        if (s.autoPostEnabled && s.autoPostY && hasKey) {
+            indicator.style.display = 'inline-block';
+            indicator.title = `Auto-posting every ${s.autoPostInterval || 5} min`;
+        } else {
+            indicator.style.display = 'none';
+        }
     }
 };
 window.YApp = YApp;

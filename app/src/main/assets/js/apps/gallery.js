@@ -2,13 +2,14 @@
  * gallery.js
  * Standalone Media Gallery Module for Fancy AI OS
  * Uses IndexedDB (ImageDB) for persistent high-capacity storage.
- * Features multi-select, select all, and bulk delete.
+ * Features multi-select, select all, bulk delete, and lazy loading.
  */
 
 const GalleryApp = {
     container: null,
     selectedIds: new Set(),
     selectMode: false,
+    currentFolder: null, // null means "Album View", otherwise a string like "All", "Ustagram", etc.
     // Touch gesture tracking parameters
     lightboxScale: 1,
     startX: 0,
@@ -19,6 +20,12 @@ const GalleryApp = {
     lastTap: 0,
     isClosingLightbox: false,
 
+    // Lazy loading state
+    _observer: null,          // IntersectionObserver for lazy loading
+    _loadedImages: new Map(), // imgId -> dataURL cache (only for visible items)
+    _registryCache: null,     // cached registry entries from ImageDB
+    _maxLoaded: 60,           // max images to keep in memory at once
+
     /**
      * Entry point called by OS.launch
      */
@@ -26,12 +33,17 @@ const GalleryApp = {
         this.container = container;
         this.selectedIds = new Set();
         this.selectMode = false;
-        this.render();
-        this.loadGalleryGrid();
+        this.currentFolder = null;
+        this._loadedImages.clear();
+        this._registryCache = null;
 
-        // Register popstate listener in the capture phase (true) to intercept before the parent shell can act
-        window.removeEventListener('popstate', GalleryApp.handlePopState, true);
-        window.addEventListener('popstate', GalleryApp.handlePopState, true);
+        // Ensure the OS knows we are in the Gallery root for back-navigation purposes
+        if (window.history.state && window.history.state.app !== 'GalleryApp') {
+            history.replaceState({ app: 'GalleryApp' }, "", "#GalleryApp");
+        }
+
+        this.render();
+        this.loadAlbumView();
     },
 
     render: function() {
@@ -63,6 +75,12 @@ const GalleryApp = {
                     align-items: center;
                     gap: 10px;
                 }
+                .btn-folder-back {
+                    background: none; border: none; color: var(--accent);
+                    font-size: 1.2rem; cursor: pointer; padding: 0 4px;
+                    display: none;
+                }
+                .btn-folder-back.show { display: block; }
                 .gallery-counter {
                     font-size: 0.78rem;
                     color: var(--text-muted);
@@ -109,6 +127,50 @@ const GalleryApp = {
                     gap: 8px;
                     width: 100%;
                 }
+                /* Album Grid */
+                .album-grid {
+                    display: grid;
+                    grid-template-columns: 1fr 1fr;
+                    gap: 16px;
+                    padding: 8px;
+                }
+                .album-card {
+                    background: var(--bg-card);
+                    border-radius: 16px;
+                    overflow: hidden;
+                    border: 1px solid var(--border);
+                    cursor: pointer;
+                    display: flex;
+                    flex-direction: column;
+                    transition: transform 0.2s;
+                }
+                .album-card:active { transform: scale(0.96); }
+                .album-preview {
+                    width: 100%;
+                    aspect-ratio: 1/1;
+                    background: #1a1a1e;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-size: 2rem;
+                    position: relative;
+                }
+                .album-preview img {
+                    width: 100%; height: 100%; object-fit: cover;
+                }
+                .album-info {
+                    padding: 10px 12px;
+                }
+                .album-name {
+                    font-size: 0.85rem;
+                    font-weight: 700;
+                    color: white;
+                    margin-bottom: 2px;
+                }
+                .album-count {
+                    font-size: 0.7rem;
+                    color: var(--text-muted);
+                }
                 .grid-item {
                     position: relative;
                     aspect-ratio: 1 / 1;
@@ -128,6 +190,13 @@ const GalleryApp = {
                     object-fit: cover;
                     display: block;
                     cursor: pointer;
+                    transition: opacity 0.2s ease;
+                }
+                .grid-item img.lazy-placeholder {
+                    opacity: 0;
+                }
+                .grid-item img.lazy-loaded {
+                    opacity: 1;
                 }
                 .grid-item.selectable img { cursor: default; }
                 .delete-thumbnail-btn {
@@ -185,6 +254,17 @@ const GalleryApp = {
                     color: var(--text-main);
                     font-weight: 600;
                 }
+                .lazy-shimmer {
+                    width: 100%;
+                    height: 100%;
+                    background: linear-gradient(110deg, var(--bg-card) 30%, rgba(255,255,255,0.04) 50%, var(--bg-card) 70%);
+                    background-size: 200% 100%;
+                    animation: shimmer 1.5s ease-in-out infinite;
+                }
+                @keyframes shimmer {
+                    0% { background-position: 200% 0; }
+                    100% { background-position: -200% 0; }
+                }
             `;
             document.head.appendChild(style);
         }
@@ -193,10 +273,11 @@ const GalleryApp = {
             <div class="gallery-wrap">
                 <div class="gallery-header">
                     <div class="gallery-header-left">
-                        <span style="font-weight: 700; font-size: 0.95rem; color: white;">Gallery</span>
-                        <span id="galleryGridItemCount" class="gallery-counter">Images: 0</span>
+                        <button id="galleryBackBtn" class="btn-folder-back" onclick="GalleryApp.goBackToAlbums()">‹</button>
+                        <span id="galleryTitle" style="font-weight: 700; font-size: 0.95rem; color: white;">Gallery</span>
+                        <span id="galleryGridItemCount" class="gallery-counter">0</span>
                     </div>
-                    <div style="display:flex; gap:6px; align-items:center;">
+                    <div id="galleryActions" style="display:none; gap:6px; align-items:center;">
                         <button id="gallerySelectBtn" class="gallery-select-btn" onclick="GalleryApp.toggleSelectMode()">Select</button>
                         <button id="galleryDeleteSelectedBtn" class="gallery-delete-selected-btn" onclick="GalleryApp.bulkDelete()">🗑️ Delete</button>
                     </div>
@@ -208,9 +289,171 @@ const GalleryApp = {
                         <button class="gallery-select-btn" onclick="GalleryApp.deselectAll()">Clear</button>
                     </div>
                 </div>
-                <div id="mediaGridSlot" class="grid-container"></div>
+                <div id="mediaGridSlot"></div>
             </div>
         `;
+    },
+
+    goBackToAlbums: function() {
+        // Just trigger the OS back logic — it knows how to handle the navStack
+        if (window.OS && typeof OS.goBack === 'function') {
+            OS.goBack();
+        } else {
+            // Fallback
+            this.currentFolder = null;
+            this.selectMode = false;
+            this.selectedIds.clear();
+            this.loadAlbumView();
+        }
+    },
+
+    loadAlbumView: async function() {
+        const slot = document.getElementById('mediaGridSlot');
+        const title = document.getElementById('galleryTitle');
+        const backBtn = document.getElementById('galleryBackBtn');
+        const countBadge = document.getElementById('galleryGridItemCount');
+        const actions = document.getElementById('galleryActions');
+        const bulkBar = document.getElementById('galleryBulkBar');
+
+        if (!slot) return;
+
+        title.innerText = "Albums";
+        backBtn.classList.remove('show');
+        actions.style.display = 'none';
+        bulkBar.style.display = 'none';
+
+        slot.innerHTML = `<div style="text-align: center; padding: 40px; color: var(--accent);">Organizing...</div>`;
+
+        try {
+            if (!window.ImageDB) throw new Error("Storage not ready");
+            const entries = await window.ImageDB.getRegistry();
+
+            const categories = {
+                'All': { name: 'All Photos', emoji: '🖼️', ids: [], preview: null },
+                'Ustagram': { name: 'Ustagram', emoji: '📸', ids: [], preview: null },
+                'Rebbit': { name: 'Rebbit', emoji: '🔞', ids: [], preview: null },
+                'Messenger': { name: 'Messenger', emoji: '💬', ids: [], preview: null },
+                'Avatars': { name: 'Avatars', emoji: '👤', ids: [], preview: null }
+            };
+
+            // Per-character albums
+            (State.characters || []).forEach(c => {
+                categories[`char_${c.id}`] = { name: c.name, emoji: '👤', ids: [], preview: null, isChar: true };
+            });
+
+            // Categorize
+            for (const entry of entries) {
+                const id = entry.id;
+                categories['All'].ids.push(id);
+                if (!categories['All'].preview) categories['All'].preview = id;
+
+                if (id.startsWith('ig_')) {
+                    categories['Ustagram'].ids.push(id);
+                    if (!categories['Ustagram'].preview) categories['Ustagram'].preview = id;
+                } else if (id.startsWith('rb_')) {
+                    categories['Rebbit'].ids.push(id);
+                    if (!categories['Rebbit'].preview) categories['Rebbit'].preview = id;
+                } else if (id.startsWith('avatar_')) {
+                    categories['Avatars'].ids.push(id);
+                    if (!categories['Avatars'].preview) categories['Avatars'].preview = id;
+                    // Also find which character this avatar belongs to
+                    const charId = id.replace('avatar_', '');
+                    if (categories[`char_${charId}`]) {
+                        categories[`char_${charId}`].ids.push(id);
+                        if (!categories[`char_${charId}`].preview) categories[`char_${charId}`].preview = id;
+                    }
+                } else if (id.startsWith('img_') || id.startsWith('res_') || id.startsWith('src_')) {
+                    categories['Messenger'].ids.push(id);
+                    if (!categories['Messenger'].preview) categories['Messenger'].preview = id;
+
+                    // Try to map Messenger images to characters
+                    // img_TIMESTAMP or img_charId_TIMESTAMP?
+                    // Actually, let's look at State.sessions if we really want accurate character mapping
+                }
+            }
+
+            // More accurate character mapping by scanning sessions
+            for (const charId in State.sessions) {
+                if (categories[`char_${charId}`]) {
+                    const session = State.sessions[charId] || [];
+                    for (const msg of session) {
+                        if (msg.type === 'image' || msg.type === 'img2img') {
+                            const refs = [];
+                            if (msg.text && msg.text.startsWith('db:')) refs.push(msg.text.replace('db:', ''));
+                            if (msg.source && msg.source.startsWith('db:')) refs.push(msg.source.replace('db:', ''));
+
+                            for (const ref of refs) {
+                                if (!categories[`char_${charId}`].ids.includes(ref)) {
+                                    categories[`char_${charId}`].ids.push(ref);
+                                    if (!categories[`char_${charId}`].preview) categories[`char_${charId}`].preview = ref;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            countBadge.innerText = entries.length;
+
+            let html = '<div class="album-grid">';
+            for (const key in categories) {
+                const cat = categories[key];
+                if (cat.ids.length === 0 && key !== 'All') continue;
+
+                html += `
+                    <div class="album-card" onclick="GalleryApp.openFolder('${key}', '${cat.name}')">
+                        <div class="album-preview" id="preview-${key}">
+                            ${cat.emoji}
+                        </div>
+                        <div class="album-info">
+                            <div class="album-name">${cat.name}</div>
+                            <div class="album-count">${cat.ids.length} images</div>
+                        </div>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            slot.innerHTML = html;
+
+            // Load previews lazily
+            for (const key in categories) {
+                const cat = categories[key];
+                if (cat.preview) {
+                    const previewEl = document.getElementById(`preview-${key}`);
+                    if (previewEl) {
+                        window.ImageDB.get('db:' + cat.preview).then(src => {
+                            if (src) previewEl.innerHTML = `<img src="${src}">`;
+                        });
+                    }
+                }
+            }
+
+        } catch (e) {
+            slot.innerHTML = `<div style="padding:20px; color:var(--danger);">${e.message}</div>`;
+        }
+    },
+
+    openFolder: function(folderId, folderName) {
+        this.currentFolder = folderId;
+        if (window.OS && typeof OS.pushView === 'function') {
+            OS.pushView(() => {
+                this.currentFolder = null;
+                this.selectMode = false;
+                this.selectedIds.clear();
+                this.loadAlbumView();
+            });
+        }
+
+        // Ensure header is fresh immediately
+        const titleEl = document.getElementById('galleryTitle');
+        const backBtn = document.getElementById('galleryBackBtn');
+        const actions = document.getElementById('galleryActions');
+
+        if (titleEl) titleEl.innerText = folderName;
+        if (backBtn) backBtn.classList.add('show');
+        if (actions) actions.style.display = 'flex';
+
+        this.loadGalleryGrid();
     },
 
     toggleSelectMode: function() {
@@ -231,14 +474,14 @@ const GalleryApp = {
     },
 
     selectAll: function() {
+        if (!this._registryCache) return;
+        for (const entry of this._registryCache) {
+            this.selectedIds.add(entry.id);
+        }
         const gridSlot = document.getElementById('mediaGridSlot');
-        if (!gridSlot) return;
-        const items = gridSlot.querySelectorAll('.grid-item');
-        items.forEach(item => {
-            const id = item.dataset.imgId;
-            if (id) this.selectedIds.add(id);
-            item.classList.add('selected');
-        });
+        if (gridSlot) {
+            gridSlot.querySelectorAll('.grid-item').forEach(item => item.classList.add('selected'));
+        }
         this.updateBulkCount();
         this.updateDeleteBtn();
     },
@@ -281,71 +524,124 @@ const GalleryApp = {
     bulkDelete: async function() {
         if (this.selectedIds.size === 0) return;
         const count = this.selectedIds.size;
-        if (!confirm(`Delete ${count} image${count > 1 ? 's' : ''}?`)) return;
-        try {
-            for (const id of this.selectedIds) {
-                if (window.ImageDB) {
-                    await window.ImageDB.delete(id);
+        OS.confirm(`Delete ${count} image${count > 1 ? 's' : ''}?`, async () => {
+            try {
+                for (const id of this.selectedIds) {
+                    if (window.ImageDB) {
+                        await window.ImageDB.delete(id);
+                    }
+                    this._loadedImages.delete(id);
                 }
+                this.selectedIds.clear();
+                this.updateBulkCount();
+                this.updateDeleteBtn();
+                this._registryCache = null; // invalidate cache
+                this.loadGalleryGrid();
+                // Trigger orphan cleanup after bulk delete
+                if (window.ImageDB && window.ImageDB.purgeOrphanedFiles) window.ImageDB.purgeOrphanedFiles();
+            } catch (err) {
+                OS.toast("Delete failed: " + err.message, 'error');
             }
-            this.selectedIds.clear();
-            this.updateBulkCount();
-            this.updateDeleteBtn();
-            this.loadGalleryGrid();
-            // Trigger orphan cleanup after bulk delete
-            if (window.ImageDB && window.ImageDB.purgeOrphanedFiles) window.ImageDB.purgeOrphanedFiles();
-        } catch (err) {
-            alert("Delete failed: " + err.message);
-        }
+        }, { title: 'Delete Images', confirmText: 'Delete', danger: true });
     },
 
+    /**
+     * Lazy load gallery grid — only loads image data for visible items.
+     * Uses IntersectionObserver to load images as they scroll into view.
+     */
     loadGalleryGrid: async function() {
         const gridSlot = document.getElementById('mediaGridSlot');
         const countBadge = document.getElementById('galleryGridItemCount');
         if (!gridSlot) return;
 
-        gridSlot.innerHTML = `<div style="grid-column: span 3; text-align: center; padding: 40px; color: var(--accent);">Loading Gallery...</div>`;
+        gridSlot.className = "grid-container"; // Ensure grid class is applied
+
+        // Disconnect any previous observer
+        if (this._observer) {
+            this._observer.disconnect();
+            this._observer = null;
+        }
+
+        gridSlot.innerHTML = `<div style="grid-column: span 3; text-align: center; padding: 40px; color: var(--accent);">Opening Album...</div>`;
 
         try {
-            // Wait for DB if it's still initializing
-            if (window.ImageDB && typeof window.ImageDB.getAll === 'function') {
-                const images = await window.ImageDB.getAll();
-                
-                if (!images || images.length === 0) {
+            if (window.ImageDB && typeof window.ImageDB.getRegistry === 'function') {
+                // Use lightweight registry
+                let entries = await window.ImageDB.getRegistry();
+
+                // Filter by current folder
+                if (this.currentFolder && this.currentFolder !== 'All') {
+                    if (this.currentFolder === 'Ustagram') {
+                        entries = entries.filter(e => e.id.startsWith('ig_'));
+                    } else if (this.currentFolder === 'Rebbit') {
+                        entries = entries.filter(e => e.id.startsWith('rb_'));
+                    } else if (this.currentFolder === 'Avatars') {
+                        entries = entries.filter(e => e.id.startsWith('avatar_'));
+                    } else if (this.currentFolder === 'Messenger') {
+                        entries = entries.filter(e => e.id.startsWith('img_') || e.id.startsWith('res_') || e.id.startsWith('src_'));
+                    } else if (this.currentFolder.startsWith('char_')) {
+                        const charId = this.currentFolder.replace('char_', '');
+                        const charIds = new Set();
+
+                        // Add avatar
+                        charIds.add(`avatar_${charId}`);
+
+                        // Add from session
+                        const session = State.sessions[charId] || [];
+                        for (const msg of session) {
+                            if (msg.text && msg.text.startsWith('db:')) charIds.add(msg.text.replace('db:', ''));
+                            if (msg.source && msg.source.startsWith('db:')) charIds.add(msg.source.replace('db:', ''));
+                        }
+
+                        // Add from posts
+                        (State.instagramPosts || []).filter(p => p.charId === charId).forEach(p => charIds.add(p.image.replace('db:', '')));
+                        (State.redditPosts || []).filter(p => p.charId === charId).forEach(p => charIds.add(p.image.replace('db:', '')));
+
+                        entries = entries.filter(e => charIds.has(e.id));
+                    }
+                }
+
+                this._registryCache = entries;
+
+                if (!entries || entries.length === 0) {
                     countBadge.innerText = "Images: 0";
                     gridSlot.innerHTML = `<div style="grid-column: span 3; padding: 60px 20px; text-align: center; color: var(--text-muted); font-size: 0.88rem; font-style: italic;">No images saved yet.</div>`;
                     return;
                 }
 
-                countBadge.innerText = `Images: ${images.length}`;
+                countBadge.innerText = `Images: ${entries.length}`;
                 gridSlot.innerHTML = '';
 
-                // Reverse to show newest first
-                [...images].reverse().forEach(img => {
+                // Create placeholder grid items for ALL entries (lightweight — no image data)
+                for (const entry of entries) {
                     const item = document.createElement('div');
-                    item.className = 'grid-item' + (this.selectedIds.has(img.id) ? ' selected' : '');
-                    item.dataset.imgId = img.id;
+                    item.className = 'grid-item' + (this.selectedIds.has(entry.id) ? ' selected' : '');
+                    item.dataset.imgId = entry.id;
 
+                    // Start with shimmer placeholder — image loads lazily
                     if (this.selectMode) {
                         item.classList.add('selectable');
                         item.innerHTML = `
-                            <div class="check-overlay">${this.selectedIds.has(img.id) ? '✓' : ''}</div>
-                            <img src="${img.data}" alt="Gallery item">
+                            <div class="check-overlay">${this.selectedIds.has(entry.id) ? '✓' : ''}</div>
+                            <div class="lazy-shimmer" data-lazy-img="${entry.id}"></div>
                         `;
-                        item.onclick = () => this.toggleSelect(img.id);
+                        item.onclick = () => this.toggleSelect(entry.id);
                     } else {
                         item.innerHTML = `
-                            <button class="delete-thumbnail-btn" onclick="event.stopPropagation(); GalleryApp.purgeStoredImage('${img.id}')">✕</button>
-                            <img src="${img.data}" alt="Gallery item">
+                            <button class="delete-thumbnail-btn" onclick="event.stopPropagation(); GalleryApp.purgeStoredImage('${entry.id}')">✕</button>
+                            <div class="lazy-shimmer" data-lazy-img="${entry.id}"></div>
                         `;
                         item.onclick = () => {
-                            if (window.ImagingApp) {
-                                window.ImagingApp.openLocalLightbox(img.data);
-                            }
+                            // Load full image for lightbox on click
+                            this._openLightbox(entry.id);
                         };
                     }
                     gridSlot.appendChild(item);
-                });
+                }
+
+                // Set up IntersectionObserver for lazy loading
+                this._setupLazyObserver(gridSlot);
+
             } else {
                 throw new Error("ImageDB not initialized");
             }
@@ -355,20 +651,147 @@ const GalleryApp = {
         }
     },
 
-    purgeStoredImage: async function(imgId) {
-        if (!confirm("Delete this image?")) return;
-        try {
-            if (window.ImageDB) {
-                await window.ImageDB.delete(imgId);
-                this.loadGalleryGrid();
+    /**
+     * Sets up IntersectionObserver to lazy-load images as they scroll into view.
+     * Only loads the actual image data when a placeholder becomes visible.
+     */
+    _setupLazyObserver: function(gridSlot) {
+        if (this._observer) {
+            this._observer.disconnect();
+        }
+
+        const rootMargin = '200px'; // Start loading 200px before item enters viewport
+
+        this._observer = new IntersectionObserver((entries) => {
+            for (const entry of entries) {
+                if (entry.isIntersecting) {
+                    const placeholder = entry.target.querySelector('[data-lazy-img]');
+                    if (placeholder && placeholder.tagName !== 'IMG') {
+                        const imgId = placeholder.dataset.lazyImg;
+                        this._loadImageIntoSlot(imgId, placeholder);
+                    }
+                }
             }
-        } catch (err) {
-            alert("Delete failed: " + err.message);
+        }, {
+            root: gridSlot.closest('.gallery-wrap') || null,
+            rootMargin: rootMargin,
+            threshold: 0.01
+        });
+
+        // Observe all grid items
+        gridSlot.querySelectorAll('.grid-item').forEach(item => {
+            this._observer.observe(item);
+        });
+    },
+
+    /**
+     * Loads an image from ImageDB into a placeholder slot.
+     * Uses the in-memory cache to avoid redundant disk reads.
+     */
+    _loadImageIntoSlot: async function(imgId, placeholder) {
+        // Check in-memory cache first
+        let dataUrl = this._loadedImages.get(imgId);
+
+        if (!dataUrl) {
+            // Load from ImageDB
+            try {
+                dataUrl = await window.ImageDB.get('db:' + imgId);
+                if (dataUrl) {
+                    this._loadedImages.set(imgId, dataUrl);
+                    // Evict old entries if cache is too large
+                    this._evictIfNeeded();
+                }
+            } catch(e) {
+                console.error("Lazy load failed for", imgId, e);
+                return;
+            }
+        }
+
+        if (!dataUrl || !placeholder.parentNode) return;
+
+        // Replace shimmer placeholder with actual image
+        const img = document.createElement('img');
+        img.src = dataUrl;
+        img.alt = 'Gallery item';
+        img.className = 'lazy-placeholder';
+        img.onload = () => {
+            img.classList.remove('lazy-placeholder');
+            img.classList.add('lazy-loaded');
+        };
+        placeholder.replaceWith(img);
+    },
+
+    /**
+     * Evicts oldest cached images when the in-memory cache exceeds _maxLoaded.
+     * Only evicts images that are NOT currently visible in the viewport.
+     */
+    _evictIfNeeded: function() {
+        if (this._loadedImages.size <= this._maxLoaded) return;
+
+        // Find visible image IDs (currently in the DOM as <img> elements)
+        const visibleIds = new Set();
+        const gridSlot = document.getElementById('mediaGridSlot');
+        if (gridSlot) {
+            gridSlot.querySelectorAll('.grid-item').forEach(item => {
+                visibleIds.add(item.dataset.imgId);
+            });
+        }
+
+        // Evict oldest entries that are not currently visible
+        // Use insertion order of Map (oldest first)
+        let evicted = 0;
+        const targetEvict = this._loadedImages.size - this._maxLoaded;
+        for (const [id, _] of this._loadedImages) {
+            if (evicted >= targetEvict) break;
+            if (!visibleIds.has(id)) {
+                this._loadedImages.delete(id);
+                evicted++;
+            }
         }
     },
 
-    handlePopState: function(e) {
-        // Placeholder to prevent app exit if lightbox is open (handled by ImagingApp global lightbox)
+    /**
+     * Opens the lightbox for an image, loading it from cache or disk.
+     */
+    _openLightbox: async function(imgId) {
+        let dataUrl = this._loadedImages.get(imgId);
+        if (!dataUrl) {
+            try {
+                dataUrl = await window.ImageDB.get('db:' + imgId);
+                if (dataUrl) this._loadedImages.set(imgId, dataUrl);
+            } catch(e) {
+                console.error("Lightbox load failed for", imgId, e);
+                return;
+            }
+        }
+        if (dataUrl && window.ImagingApp) {
+            window.ImagingApp.openLocalLightbox(dataUrl, 'db:' + imgId);
+        }
+    },
+
+    purgeStoredImage: async function(imgId) {
+        OS.confirm("Delete this image?", async () => {
+            try {
+                if (window.ImageDB) {
+                    await window.ImageDB.delete(imgId);
+                    this._loadedImages.delete(imgId);
+                    this._registryCache = null; // invalidate cache
+                    this.loadGalleryGrid();
+                }
+            } catch (err) {
+                OS.toast("Delete failed: " + err.message, 'error');
+            }
+        }, { title: 'Delete Image', confirmText: 'Delete', danger: true });
+    },
+
+    cleanup: function() {
+        // Disconnect observer and clear cache when leaving gallery
+        if (this._observer) {
+            this._observer.disconnect();
+            this._observer = null;
+        }
+        this._loadedImages.clear();
+        this._registryCache = null;
     }
 };
 
