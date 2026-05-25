@@ -15,6 +15,11 @@ const ImagingApp = {
     isClosingLightbox: false,
     attachedImage: null,
 
+    // Generation queue — serializes requests so only one hits the server at a time
+    // This prevents concurrent requests from crashing Local Dream / NPU servers
+    _genQueue: [],
+    _genRunning: false,
+
     getSettings: function() {
         if (typeof Store !== 'undefined' && typeof Store.get === 'function') {
             return Store.get('ds_settings') || {};
@@ -269,8 +274,9 @@ const ImagingApp = {
         });
     },
 
-    openLocalLightbox: function(src) {
+    openLocalLightbox: function(src, dbRef = null) {
         this.ensureLightbox();
+        this._currentDbRef = dbRef;
         const modal = document.getElementById('imagingModuleLightboxModal');
         const img = document.getElementById('imagingModuleLightboxImg');
         img.src = src;
@@ -285,6 +291,8 @@ const ImagingApp = {
         const modal = document.getElementById('imagingModuleLightboxModal');
         if (modal && modal.style.display === 'flex') {
             modal.style.display = 'none';
+            // Only pop history if we're not being called from the OS back handler
+            // (which already consumed the back navigation)
             if (!preventHistoryPop && window.history.state && window.history.state.imagingLightbox) {
                 ImagingApp.isClosingLightbox = true;
                 window.history.back();
@@ -293,17 +301,18 @@ const ImagingApp = {
     },
 
     handlePopState: function(e) {
-        if (ImagingApp.isClosingLightbox) { 
-            e.stopImmediatePropagation(); 
-            e.stopPropagation(); 
-            ImagingApp.isClosingLightbox = false; 
+        // If we're closing the lightbox via history.back(), just consume the event
+        if (ImagingApp.isClosingLightbox) {
+            ImagingApp.isClosingLightbox = false;
             return; 
         }
+        // If lightbox is open and a popstate fires (e.g. from browser back),
+        // close the lightbox and consume the event so OS doesn't navigate away
         const modal = document.getElementById('imagingModuleLightboxModal');
         if (modal && modal.style.display === 'flex') { 
-            e.stopImmediatePropagation(); 
+            ImagingApp.closeLocalLightbox(true);
+            e.stopImmediatePropagation();
             e.stopPropagation(); 
-            ImagingApp.closeLocalLightbox(true); 
         }
     },
 
@@ -467,7 +476,36 @@ const ImagingApp = {
         } catch(e) { if (container) container.innerHTML = `<span style="color:#ef4444; font-size:0.9rem;">Error: ${e.message}</span>`; }
     },
 
+    // Queued generation — ensures only one image generation request hits the server at a time
+    // This prevents concurrent requests from crashing Local Dream / NPU servers
+    // Callers still use ImagingApp.generate(promptText, settings, onProgress) — the API is unchanged.
     generate: async function(promptText, s = null, onProgress = null) {
+        // If a generation is already running, wait for it to finish before starting this one
+        if (this._genRunning) {
+            console.log("ImagingApp: Queuing generation request (another is in progress)");
+            return new Promise((resolve, reject) => {
+                this._genQueue.push({ promptText, s, onProgress, resolve, reject });
+            });
+        }
+        this._genRunning = true;
+        try {
+            const result = await this._doGenerate(promptText, s, onProgress);
+            return result;
+        } finally {
+            this._genRunning = false;
+            // Process next queued request if any
+            if (this._genQueue.length > 0) {
+                const next = this._genQueue.shift();
+                // Run next in background — don't block the current caller's return
+                this.generate(next.promptText, next.s, next.onProgress)
+                    .then(next.resolve)
+                    .catch(next.reject);
+            }
+        }
+    },
+
+    // The actual generation logic (previously the body of generate())
+    _doGenerate: async function(promptText, s = null, onProgress = null) {
         if (!s) s = this.getSettings();
         const strength = s.imgDenoising !== undefined ? s.imgDenoising : 0.75;
         let finalImageB64 = null;

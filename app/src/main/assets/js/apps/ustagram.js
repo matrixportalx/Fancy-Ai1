@@ -5,11 +5,14 @@
  */
 const UstagramApp = {
     container: null,
+    _autoPostTimer: null,
+    _autoPosting: false,
 
     init: function(container) {
         this.container = container;
         this.render();
         this.loadPosts();
+        this.startAutoPost();
     },
 
     render: function() {
@@ -35,7 +38,7 @@ const UstagramApp = {
         }
         this.container.innerHTML = `
             <div class="ug-wrap">
-                <div class="ug-header"><h2>Ustagram</h2></div>
+                <div class="ug-header"><h2>Ustagram</h2><span id="ugAutoPostIndicator" style="display:none; width:8px; height:8px; border-radius:50%; background:#22c55e; box-shadow:0 0 6px #22c55e; animation: pulse 2s infinite;"></span></div>
                 <div class="ug-controls">
                     <button class="ug-btn-gen" id="ugGenBtn" onclick="UstagramApp.generatePost()">📸 New Photo</button>
                     <button class="ug-btn-gen" style="background:#333" onclick="UstagramApp.clearAll()">🗑️</button>
@@ -64,8 +67,21 @@ const UstagramApp = {
                 </div>
                 <div class="ug-post-img-container" id="${imgId}"></div>
                 <div class="ug-post-caption"><b>${p.charName || 'Anon'}</b> ${OS.formatMarkdown(p.caption || '')}</div>
+                <div id="comments-${p.id}" style="padding: 0 0 8px 0;"></div>
             `;
             el.appendChild(postEl);
+
+            // Render Comments
+            const commentsContainer = document.getElementById(`comments-${p.id}`);
+            if (p.comments && p.comments.length > 0) {
+                p.comments.forEach(c => {
+                    const cDiv = document.createElement('div');
+                    cDiv.style.fontSize = '0.82rem';
+                    cDiv.style.marginBottom = '2px';
+                    cDiv.innerHTML = `<b style="color:white; margin-right:6px;">${c.charName}</b> ${OS.formatMarkdown(c.text)}`;
+                    commentsContainer.appendChild(cDiv);
+                });
+            }
 
             // Resolve Native Storage
             this.resolveToElement(p.image, imgId, true);
@@ -81,15 +97,23 @@ const UstagramApp = {
         }
         const el = document.getElementById(containerId);
         if (el && finalSrc) {
-            el.innerHTML = isPost ? `<img class="ug-post-img" src="${finalSrc}" onclick="ImagingApp.openLocalLightbox(this.src)">` : `<img src="${finalSrc}">`;
+            if (isPost) {
+                el.innerHTML = `<img class="ug-post-img" src="${finalSrc}">`;
+                el.querySelector('img').onclick = () => {
+                    if (window.ImagingApp) ImagingApp.openLocalLightbox(finalSrc, src);
+                };
+            } else {
+                el.innerHTML = `<img src="${finalSrc}">`;
+            }
         }
     },
 
     generatePost: async function() {
         const btn = document.getElementById('ugGenBtn');
-        if (!btn) return;
-        btn.disabled = true; btn.innerText = "⏳ Dreaming...";
+        if (btn) { btn.disabled = true; btn.innerText = "⏳ Dreaming..."; }
         const bot = State.characters[Math.floor(Math.random() * State.characters.length)];
+        if (!bot) { console.warn("Ustagram: No characters available for auto-post"); if (btn) { btn.disabled = false; btn.innerText = "📸 New Photo"; } return; }
+        console.log("Ustagram: Generating post for " + bot.name);
 
         // Random post category for variety
         const categories = [
@@ -127,7 +151,7 @@ const UstagramApp = {
 
         try {
             const response = await API.sendMessage(bot.id, `You are posting on Instagram right now. ${category.prompt}${mentionStr} Write a natural, engaging caption (emojis welcome, hashtags optional). Then on a new line write "flux prompt:" followed by a detailed visual description of the photo (photorealistic, 85mm lens, professional photography terms, describe lighting, expression, setting, outfit, and mood). Make the photo description feel like a real Instagram photo, not a generic stock image. Vary the angle, lighting, setting, and activity every time.`, (chunk) => {
-                btn.innerText = "⏳ Thinking...";
+                if (btn) btn.innerText = "⏳ Thinking...";
             }, false, 'social');
 
             let caption = "New post!";
@@ -145,33 +169,121 @@ const UstagramApp = {
             let b64 = null;
             if (window.ImagingApp) {
                 b64 = await window.ImagingApp.generate(visualPrompt, null, (p) => {
-                    btn.innerText = `⏳ ${p}%`;
+                    if (btn) btn.innerText = `⏳ ${p}%`;
                 });
             }
             if (b64 && window.ImageDB) {
                 const dbId = 'ig_' + Date.now();
                 await window.ImageDB.save(dbId, b64);
                 if (!State.instagramPosts) State.instagramPosts = [];
-                State.instagramPosts.push({ id: dbId, charId: bot.id, charName: bot.name, image: `db:${dbId}`, caption, timestamp: Date.now() });
+                State.instagramPosts.push({ id: dbId, charId: bot.id, charName: bot.name, image: `db:${dbId}`, caption, timestamp: Date.now(), comments: [] });
+                State.save();
+                this.loadPosts();
+                // Update home screen badge if user is not in this app
+                if (OS.activeApp !== 'UstagramApp' && OS.updateBadges) OS.updateBadges();
+
+                // Chance for others to comment
+                if (State.characters.length > 1) {
+                    setTimeout(() => this.generateComment(dbId), 4000 + Math.random() * 6000);
+                }
+            }
+        } catch(e) { console.error(e); }
+        if (btn) { btn.disabled = false; btn.innerText = "📸 New Photo"; }
+    },
+
+    generateComment: async function(postId) {
+        const post = (State.instagramPosts || []).find(p => p.id === postId);
+        if (!post) return;
+        const others = State.characters.filter(c => c.id !== post.charId);
+        if (others.length === 0) return;
+
+        const commenter = others[Math.floor(Math.random() * others.length)];
+        try {
+            const api = window.API;
+            const prompt = `You are ${commenter.name}. You see a new photo posted by ${post.charName} on Ustagram with the caption: "${post.caption}". Write a short, natural comment (max 12 words, emojis welcome) as yourself. Output ONLY the comment text.`;
+            const comment = await api.sendMessage(commenter.id, prompt, null, false, 'social');
+            if (comment && comment.length > 1) {
+                if (!post.comments) post.comments = [];
+                post.comments.push({
+                    charId: commenter.id,
+                    charName: commenter.name,
+                    text: comment.trim(),
+                    timestamp: Date.now()
+                });
                 State.save();
                 this.loadPosts();
             }
-        } catch(e) { console.error(e); }
-        btn.disabled = false; btn.innerText = "📸 New Photo";
+        } catch(e) {}
     },
 
     clearAll: async function() {
-        if (!confirm("Clear all photos?")) return;
-        if (window.ImageDB) {
-            for (const p of (State.instagramPosts || [])) {
-                if (p.image.startsWith('db:')) await window.ImageDB.delete(p.image.replace('db:', ''));
+        OS.confirm("Clear all photos?", async () => {
+            if (window.ImageDB) {
+                for (const p of (State.instagramPosts || [])) {
+                    if (p.image.startsWith('db:')) await window.ImageDB.delete(p.image.replace('db:', ''));
+                }
             }
+            State.instagramPosts = [];
+            State.save();
+            // Trigger orphan cleanup
+            if (window.ImageDB && window.ImageDB.purgeOrphanedFiles) window.ImageDB.purgeOrphanedFiles();
+            this.loadPosts();
+        }, { title: 'Clear Feed', confirmText: 'Clear All', danger: true });
+    },
+
+    startAutoPost: function() {
+        this.stopAutoPost();
+        const s = State.settings || {};
+        if (!s.autoPostEnabled || !s.autoPostUstagram) return;
+        // Check for API key (not needed for localllm provider)
+        const provider = s.provider || 'deepinfra';
+        if (provider !== 'localllm' && !s.key) return;
+        const interval = (s.autoPostInterval || 5) * 60 * 1000;
+        // Add random jitter ±30% so feeds don't all post at the same time
+        const jitter = interval * (0.7 + Math.random() * 0.6);
+        // Stagger the first post: wait 0-60s so multiple feeds don't all hit the server at once
+        const initialDelay = Math.floor(Math.random() * 60000);
+        this._autoPostTimer = setTimeout(() => {
+            // After initial delay, switch to regular interval
+            this._autoPostTimer = setInterval(() => {
+                if (this._autoPosting) return; // Don't stack if previous is still running
+                this._autoPosting = true;
+                this.generatePost().finally(() => { this._autoPosting = false; });
+            }, jitter);
+            // Also do the first post now
+            if (!this._autoPosting) {
+                this._autoPosting = true;
+                this.generatePost().finally(() => { this._autoPosting = false; });
+            }
+        }, initialDelay);
+        this.updateAutoPostIndicator();
+    },
+
+    stopAutoPost: function() {
+        if (this._autoPostTimer) {
+            clearInterval(this._autoPostTimer);
+            clearTimeout(this._autoPostTimer);
+            this._autoPostTimer = null;
         }
-        State.instagramPosts = [];
-        State.save();
-        // Trigger orphan cleanup
-        if (window.ImageDB && window.ImageDB.purgeOrphanedFiles) window.ImageDB.purgeOrphanedFiles();
-        this.loadPosts();
+        this._autoPosting = false;
+    },
+
+    updateAutoPostIndicator: function() {
+        const indicator = document.getElementById('ugAutoPostIndicator');
+        if (!indicator) return;
+        const s = State.settings || {};
+        const provider = s.provider || 'deepinfra';
+        const hasKey = provider === 'localllm' || s.key;
+        if (s.autoPostEnabled && s.autoPostUstagram && hasKey) {
+            indicator.style.display = 'inline-block';
+            indicator.title = `Auto-posting every ${s.autoPostInterval || 5} min`;
+        } else {
+            indicator.style.display = 'none';
+        }
+    },
+
+    cleanup: function() {
+        this.stopAutoPost();
     }
 };
 window.UstagramApp = UstagramApp;

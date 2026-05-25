@@ -12,12 +12,13 @@ A native Android application (`com.mrj.fancyai`) that embeds a **WebView-based v
 |---|---|
 | `./gradlew assembleDebug` | Build debug APK |
 | `./gradlew installDebug` | Install on connected device |
+| `./gradlew assembleRelease` | Build release APK |
 | `./gradlew test` | Run unit tests (currently none) |
 | `./gradlew connectedAndroidTest` | Run instrumented tests (currently none) |
 
 - **AGP**: `8.13.2` | **compileSdk/targetSdk**: `36` | **minSdk**: `24`
 - **Java Version**: `17` (source & target compatibility)
-- **Version**: `2.0.9` (versionCode: `1`)
+- **Version**: `3.0.0` (versionCode: `2`)
 - **Namespace**: `com.mrj.fancyai`
 
 ---
@@ -100,14 +101,14 @@ window.AppName = AppName;
 
 | App | Key Responsibilities |
 |---|---|---|
-| **MessengerApp** | Per-character chat with streaming LLM responses. Supports text formatting (`**bold**`, `*italic*`), image generation triggers, regenerate/delete/copy messages, img2img transforms, character selector popup, typing indicator. |
+| **MessengerApp** | Per-character chat with streaming LLM responses. Supports text formatting (`**bold**`, `*italic*`), image generation triggers, vision mode, voice input (STT), voice output (TTS), character selector popup, typing indicator. |
 | **ImagingApp** | Image generation via two pipelines: **Forge** (Stable Diffusion WebUI API at `/sdapi/v1/txt2img`) and **Local Dream** (Snapdragon NPU on-device server via SSE). Shared lightbox with touch gestures (pinch-zoom, drag-to-dismiss). |
-| **UstagramApp** | SFW lifestyle social feed — bots post photorealistic Instagram-style photos (selfie, food, outfit, nature, travel, etc.) with captions. Uses ImageDB for storage. |
-| **RebbitApp** | NSFW amateur feed — bots post explicit photos themed to configurable subreddit categories (r/gonewild, r/realgirls, etc.). Per-character enable/disable toggle via `char.enableRebbit`. |
-| **YApp** | Text-only micro-blog feed — bots post short statuses (hot takes, daily life, questions, etc.) with auto-generated threaded replies from other characters. |
+| **UstagramApp** | SFW lifestyle social feed — bots post photorealistic Instagram-style photos with captions and inter-bot comments. Uses ImageDB for storage. |
+| **RebbitApp** | NSFW amateur feed — bots post explicit photos themed to configurable subreddit categories with inter-bot comments. Per-character enable/disable toggle via `char.enableRebbit`. |
+| **YApp** | Text-only micro-blog feed — bots post short statuses with auto-generated threaded replies from other characters. |
 | **ContactsApp** | CRUD for AI character identities. Grid layout with avatar generation. Each character has `id`, `name`, `handle`, `bio`, `persona`, `follower_count`, `enableAutoPost`, `avatar`, `enableRebbit`. |
-| **SettingsApp** | LLM provider config (provider, URL, API key, model ID with live model list fetch + search/filter), user profile (name, bio), system prompts manager (multiple prompts, CRUD), backup/restore (ZIP via JSZip + chunked `AndroidBridge`). |
-| **GalleryApp** | Grid view of all images stored in ImageDB with multi-select, select-all, and bulk delete support. |
+| **SettingsApp** | LLM provider config, user profile, system prompts manager, autonomous life toggle, backup/restore. |
+| **GalleryApp** | Organized album view (All, Social, Messenger, Avatars, Per-Character) with multi-select and lazy loading. |
 | **GamesApp** | Game hub with Adventure (CYOA), Dice Duel RPG, Truth or Dare, Tactical Command, Two Truths & A Lie, Oracle, Would You Rather, and a Security Bypass hacking minigame. |
 
 ### Android ↔ JavaScript Bridge

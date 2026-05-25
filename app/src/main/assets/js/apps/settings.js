@@ -108,6 +108,7 @@ const SettingsApp = {
                         <select id="cfgProvider" class="form-control" onchange="SettingsApp.handleProviderChange()">
                             <option value="deepinfra">DeepInfra</option>
                             <option value="openrouter">OpenRouter</option>
+                            <option value="localllm">Local LLM (On-Device)</option>
                             <option value="custom">Custom Endpoint</option>
                         </select>
                     </div>
@@ -115,7 +116,36 @@ const SettingsApp = {
                         <label for="cfgUrl">Base URL</label>
                         <input type="text" id="cfgUrl" class="form-control" placeholder="https://api.example.com/v1">
                     </div>
-                    <div class="form-group">
+                    <div id="localLlmGuide" style="display:none; background:rgba(139,92,246,0.06); border:1px solid rgba(139,92,246,0.15); border-radius:12px; padding:14px; font-size:0.82rem; line-height:1.55; color:var(--text-muted);">
+                        <div style="font-weight:800; color:var(--accent); margin-bottom:8px; font-size:0.9rem;">🖥️ Local LLM Setup Guide</div>
+                        <div style="margin-bottom:8px;">Run an OpenAI-compatible server on your device. No API key needed — everything stays on your phone.</div>
+                        <div style="background:var(--bg-input); border-radius:8px; padding:10px; margin-bottom:8px; font-family:monospace; font-size:0.75rem; color:#a78bfa; word-break:break-all;">
+                            <div style="color:var(--text-muted); margin-bottom:4px;">Option 1 — Termux + llama.cpp:</div>
+                            <div>$ pkg install git cmake</div>
+                            <div>$ git clone https://github.com/ggml-org/llama.cpp</div>
+                            <div>$ cd llama.cpp && cmake -B build && cmake --build build --config Release</div>
+                            <div>$ ./build/bin/llama-server -m model.gguf --port 8082 --host 0.0.0.0</div>
+                        </div>
+                        <div style="background:var(--bg-input); border-radius:8px; padding:10px; margin-bottom:8px; font-family:monospace; font-size:0.75rem; color:#a78bfa; word-break:break-all;">
+                            <div style="color:var(--text-muted); margin-bottom:4px;">Option 2 — MLC Chat (Android APK):</div>
+                            <div>1. Install MLC Chat from Play Store / GitHub</div>
+                            <div>2. Download a model inside the app</div>
+                            <div>3. Enable the local server in MLC Chat settings</div>
+                            <div>4. Set the URL below to the MLC Chat server address</div>
+                        </div>
+                        <div style="background:var(--bg-input); border-radius:8px; padding:10px; font-family:monospace; font-size:0.75rem; color:#a78bfa; word-break:break-all;">
+                            <div style="color:var(--text-muted); margin-bottom:4px;">Option 3 — Any OpenAI-compatible server:</div>
+                            <div>Run ollama, text-generation-webui, vLLM, etc.</div>
+                            <div>Just make sure it exposes /v1/chat/completions</div>
+                        </div>
+                        <div style="margin-top:10px; padding-top:8px; border-top:1px solid rgba(139,92,246,0.1);">
+                            <span style="color:#22c55e; font-weight:700;">✓ Zero API cost</span> ·
+                            <span style="color:#22c55e; font-weight:700;">✓ Fully private</span> ·
+                            <span style="color:#f59e0b; font-weight:700;">⚠ Requires 4-8GB RAM</span> ·
+                            <span style="color:#f59e0b; font-weight:700;">⚠ Slower than cloud</span>
+                        </div>
+                    </div>
+                    <div class="form-group" id="apiKeyGroup">
                         <label for="cfgKey">API Key</label>
                         <input type="password" id="cfgKey" class="form-control" placeholder="sk-...">
                     </div>
@@ -140,6 +170,50 @@ const SettingsApp = {
                     </div>
                 </div>
 
+                <!-- Social Auto-Post Section -->
+                <div class="settings-section">
+                    <div class="section-title">Social Auto-Post</div>
+                    <div class="form-group">
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                            <input type="checkbox" id="cfgAutoPostEnabled" style="width:18px; height:18px; accent-color:var(--accent);">
+                            <span style="color:var(--text-main); font-size:0.88rem; font-weight:600;">Enable Auto-Posting</span>
+                        </label>
+                        <div style="font-size:0.72rem; color:var(--text-muted); padding-left:28px;">Bots will automatically post to social feeds while the app is open</div>
+                    </div>
+                    <div id="autoPostDetails" style="display:none; flex-direction:column; gap:10px; padding-top:4px; border-top:1px solid var(--border);">
+                        <div class="form-group">
+                            <label for="cfgAutoPostInterval">Post Interval: <span id="lblAutoPostInterval" style="color:var(--text-main);">5</span> min</label>
+                            <input type="range" id="cfgAutoPostInterval" min="1" max="30" step="1" value="5" class="form-control" style="padding:4px; accent-color:var(--accent);" oninput="document.getElementById('lblAutoPostInterval').innerText = this.value">
+                        </div>
+                        <div style="display:flex; flex-direction:column; gap:8px;">
+                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                                <input type="checkbox" id="cfgAutoPostUstagram" style="width:18px; height:18px; accent-color:#dd2a7b;">
+                                <span style="color:var(--text-main); font-size:0.85rem;">📸 Ustagram</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                                <input type="checkbox" id="cfgAutoPostRebbit" style="width:18px; height:18px; accent-color:#ff4500;">
+                                <span style="color:var(--text-main); font-size:0.85rem;">🔞 Rebbit</span>
+                            </label>
+                            <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                                <input type="checkbox" id="cfgAutoPostY" style="width:18px; height:18px; accent-color:#1da1f2;">
+                                <span style="color:var(--text-main); font-size:0.85rem;">✕ Y</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Autonomous Life Section -->
+                <div class="settings-section">
+                    <div class="section-title">Autonomous Life</div>
+                    <div class="form-group">
+                        <label style="display:flex; align-items:center; gap:10px; cursor:pointer;">
+                            <input type="checkbox" id="cfgAutonomousEnabled" style="width:18px; height:18px; accent-color:var(--accent);">
+                            <span style="color:var(--text-main); font-size:0.88rem; font-weight:600;">Enable Autonomous Thoughts</span>
+                        </label>
+                        <div style="font-size:0.72rem; color:var(--text-muted); padding-left:28px;">Bots will occasionally think privately or message you when you are away. (Increases API usage)</div>
+                    </div>
+                </div>
+
                 <button class="btn btn-primary" style="margin-top: 8px; padding: 16px;" onclick="SettingsApp.saveSettings()">Save & Close</button>
             </div>
 
@@ -161,8 +235,30 @@ const SettingsApp = {
 
     handleProviderChange: function() {
         const provSel = document.getElementById('cfgProvider');
+        const val = provSel.value;
         const urlGroup = document.getElementById('customUrlGroup');
-        urlGroup.style.display = (provSel.value === 'custom') ? 'flex' : 'none';
+        const guide = document.getElementById('localLlmGuide');
+        const apiKeyGroup = document.getElementById('apiKeyGroup');
+
+        // Show URL field for custom and localllm
+        urlGroup.style.display = (val === 'custom' || val === 'localllm') ? 'flex' : 'none';
+
+        // Show setup guide only for localllm
+        if (guide) guide.style.display = (val === 'localllm') ? 'block' : 'none';
+
+        // Hide API key for localllm (not needed)
+        if (apiKeyGroup) apiKeyGroup.style.display = (val === 'localllm') ? 'none' : 'flex';
+
+        // Auto-fill default URL for Local LLM if field is empty or still has default
+        const urlInput = document.getElementById('cfgUrl');
+        if (val === 'localllm' && urlInput && (!urlInput.value || urlInput.value === '')) {
+            urlInput.value = 'http://127.0.0.1:8082';
+            urlInput.placeholder = 'http://127.0.0.1:8082';
+        } else if (val === 'custom') {
+            urlInput.placeholder = 'https://api.example.com/v1';
+        } else if (val === 'localllm') {
+            urlInput.placeholder = 'http://127.0.0.1:8082';
+        }
     },
 
     loadSettingsToForm: function() {
@@ -175,6 +271,27 @@ const SettingsApp = {
         document.getElementById('cfgUrl').value = s.url || '';
         document.getElementById('cfgKey').value = s.key || '';
         document.getElementById('cfgModel').value = s.model || '';
+
+        // Auto-post settings — load INTO form
+        const apEnabled = document.getElementById('cfgAutoPostEnabled');
+        const apDetails = document.getElementById('autoPostDetails');
+        const apInterval = document.getElementById('cfgAutoPostInterval');
+        const apIntervalLabel = document.getElementById('lblAutoPostInterval');
+        if (apEnabled) {
+            apEnabled.checked = s.autoPostEnabled || false;
+            apEnabled.onchange = () => {
+                if (apDetails) apDetails.style.display = apEnabled.checked ? 'flex' : 'none';
+            };
+        }
+        if (apDetails) apDetails.style.display = (s.autoPostEnabled) ? 'flex' : 'none';
+        if (apInterval) apInterval.value = s.autoPostInterval || 5;
+        if (apIntervalLabel) apIntervalLabel.innerText = s.autoPostInterval || 5;
+
+        const setChecked = (id, val) => { const el = document.getElementById(id); if (el) el.checked = val; };
+        setChecked('cfgAutoPostUstagram', s.autoPostUstagram !== false);
+        setChecked('cfgAutoPostRebbit', s.autoPostRebbit !== false);
+        setChecked('cfgAutoPostY', s.autoPostY !== false);
+        setChecked('cfgAutonomousEnabled', s.autonomousEnabled === true);
 
         this.renderPromptList();
         this.handleProviderChange();
@@ -212,16 +329,17 @@ const SettingsApp = {
     },
 
     addNewPrompt: function() {
-        const name = prompt("Enter prompt name:", "New Prompt");
-        if (!name) return;
-        const id = 'p' + Date.now();
-        State.settings.systemPrompts.push({ id, name, content: "You are a helpful assistant." });
-        State.settings.activePromptId = id;
-        this.renderPromptList();
+        OS.prompt("Enter prompt name:", "New Prompt", (name) => {
+            if (!name) return;
+            const id = 'p' + Date.now();
+            State.settings.systemPrompts.push({ id, name, content: "You are a helpful assistant." });
+            State.settings.activePromptId = id;
+            this.renderPromptList();
+        });
     },
 
     deleteCurrentPrompt: function() {
-        if (State.settings.systemPrompts.length <= 1) return alert("You must have at least one prompt.");
+        if (State.settings.systemPrompts.length <= 1) { OS.toast("You must have at least one prompt.", 'warning'); return; }
         const id = document.getElementById('cfgActivePrompt').value;
         State.settings.systemPrompts = State.settings.systemPrompts.filter(p => p.id !== id);
         State.settings.activePromptId = State.settings.systemPrompts[0].id;
@@ -239,8 +357,16 @@ const SettingsApp = {
         State.settings.key = document.getElementById('cfgKey').value;
         State.settings.model = document.getElementById('cfgModel').value;
 
+        // Auto-post settings
+        State.settings.autoPostEnabled = document.getElementById('cfgAutoPostEnabled').checked;
+        State.settings.autoPostInterval = parseInt(document.getElementById('cfgAutoPostInterval').value) || 5;
+        State.settings.autoPostUstagram = document.getElementById('cfgAutoPostUstagram').checked;
+        State.settings.autoPostRebbit = document.getElementById('cfgAutoPostRebbit').checked;
+        State.settings.autoPostY = document.getElementById('cfgAutoPostY').checked;
+        State.settings.autonomousEnabled = document.getElementById('cfgAutonomousEnabled').checked;
+
         State.save();
-        alert("Settings saved!");
+        OS.toast("Settings saved!", 'success');
         OS.goHome();
     },
 
@@ -256,6 +382,11 @@ const SettingsApp = {
         let headers = { "Content-Type": "application/json" };
         if (provider === 'openrouter') { url = "https://openrouter.ai/api/v1/models"; }
         else if (provider === 'deepinfra') { url = "https://api.deepinfra.com/v1/openai/models"; if (key) headers["Authorization"] = `Bearer ${key}`; }
+        else if (provider === 'localllm') {
+            // Local LLM — try to fetch models from the local server
+            const localUrl = customUrl || 'http://127.0.0.1:8082';
+            url = `${localUrl.replace(/\/$/, '')}/v1/models`;
+        }
         else { if (!customUrl) { container.innerHTML = `<span style="color:red">Base URL required</span>`; return; } url = `${customUrl.replace(/\/$/, '')}/models`; if (key) headers["Authorization"] = `Bearer ${key}`; }
         try {
             const res = await fetch(url, { method: 'GET', headers });
@@ -290,6 +421,7 @@ const SettingsApp = {
             const data = {
                 settings: State.settings, chars: State.characters, userProfile: State.userProfile,
                 activeChar: State.activeCharId, sessions: State.sessions,
+                memories: State.memories || {},
                 instagramPosts: State.instagramPosts || [], redditPosts: State.redditPosts || [], xPosts: State.xPosts || []
             };
             const zip = new JSZip();
@@ -316,8 +448,8 @@ const SettingsApp = {
                 const a = document.createElement('a'); a.href = dataUrl; a.download = `fancy_ai_backup_${Date.now()}.zip`;
                 document.body.appendChild(a); a.click(); document.body.removeChild(a);
             }
-            alert("Backup exported!");
-        } catch(e) { alert("Export failed: " + e.message); }
+            OS.toast("Backup exported!", 'success');
+        } catch(e) { OS.toast("Export failed: " + e.message, 'error'); }
     },
     importData: function(event) {
         const file = event.target.files[0]; if(!file) return;
@@ -334,24 +466,13 @@ const SettingsApp = {
                     if (data.userProfile) State.userProfile = data.userProfile;
                     if (data.activeChar) State.activeCharId = data.activeChar;
                     if (data.sessions) State.sessions = data.sessions;
+                    if (data.memories) State.memories = data.memories;
                     State.save();
-                    if (window.ImageDB) {
-                        const images = zip.folder('images');
-                        if (images) {
-                            const files = []; images.forEach(path => files.push(path));
-                            for (const name of files) {
-                                const f = images.file(name); if (!f) continue;
-                                const ext = name.split('.').pop();
-                                const binary = await f.async('base64');
-                                await window.ImageDB.save(name.replace(/\.\w+$/, ''), `data:image/${ext};base64,${binary}`);
-                            }
-                        }
-                    }
                 } else {
                     Object.assign(State, JSON.parse(e.target.result)); State.save();
                 }
-                alert("Import Successful!"); location.reload();
-            } catch(err) { alert("Import Failed: " + err.message); }
+                OS.toast("Import Successful!", 'success'); location.reload();
+            } catch(err) { OS.toast("Import Failed: " + err.message, 'error'); }
         };
         if (file.name.endsWith('.zip')) reader.readAsArrayBuffer(file); else reader.readAsText(file);
     }

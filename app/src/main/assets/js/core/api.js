@@ -7,7 +7,7 @@ window.API = {
      * Dispatches text generation requests based on user settings.
      * Supports real-time streaming if an onUpdate callback is provided.
      */
-    sendMessage: async function(charId, userText, onUpdate = null, includeHistory = true, context = 'chat') {
+    sendMessage: async function(charId, userText, onUpdate = null, includeHistory = true, context = 'chat', imageBase64 = null) {
         if (typeof State === 'undefined') throw new Error("State module not found.");
 
         const char = (State.characters || []).find(c => c.id === charId) || {};
@@ -22,6 +22,12 @@ window.API = {
             endpoint = "https://api.deepinfra.com/v1/openai/chat/completions";
         } else if (provider === 'openrouter') {
             endpoint = "https://openrouter.ai/api/v1/chat/completions";
+        } else if (provider === 'localllm') {
+            // Local LLM — uses the same OpenAI-compatible endpoint format as custom
+            endpoint = s.url || 'http://127.0.0.1:8082/v1/chat/completions';
+            if (!endpoint.endsWith('/chat/completions') && !endpoint.endsWith('/generate')) {
+                endpoint = endpoint.replace(/\/$/, '') + '/v1/chat/completions';
+            }
         } else {
             endpoint = s.url || 'http://10.0.2.2:5000/v1/chat/completions';
             if (!endpoint.endsWith('/chat/completions') && !endpoint.endsWith('/generate')) {
@@ -112,6 +118,7 @@ CRITICAL RULES for "flux prompt:":
             userBlock,
             roleDirective,
             baseSystemPrompt ? "[GLOBAL GUIDELINES]\n" + baseSystemPrompt : '',
+            State.getMemoriesPrompt ? State.getMemoriesPrompt(charId) : '',
             toolInstruction
         ].filter(p => p.trim().length > 0);
 
@@ -122,6 +129,8 @@ CRITICAL RULES for "flux prompt:":
         // Context window management
         if (includeHistory) {
             history.slice(-16).forEach(msg => {
+                // If previous message had an image, it was just text in our history [Img2Img Request] etc.
+                // We keep history simple (text only) to save tokens, unless it's the current message
                 messages.push({
                     role: msg.sender === 'user' ? 'user' : 'assistant',
                     content: msg.text
@@ -130,21 +139,35 @@ CRITICAL RULES for "flux prompt:":
         }
 
         // Add current prompt
-        if (messages.length === 1 || messages[messages.length - 1].content !== userText) {
+        if (imageBase64) {
+            // Support for Vision models
+            messages.push({
+                role: "user",
+                content: [
+                    { type: "text", text: userText || "What do you see in this image?" },
+                    { type: "image_url", image_url: { url: imageBase64 } }
+                ]
+            });
+        } else if (messages.length === 1 || messages[messages.length - 1].content !== userText) {
             messages.push({ role: "user", content: userText });
         }
 
         const isStreaming = typeof onUpdate === 'function';
 
         try {
+            // Build headers — skip Authorization for localllm (no API key needed)
+            const headers = {
+                'Content-Type': 'application/json',
+                'HTTP-Referer': 'https://fancy-ai.os',
+                'X-Title': 'Fancy AI'
+            };
+            if (provider !== 'localllm' && s.key) {
+                headers['Authorization'] = `Bearer ${s.key}`;
+            }
+
             const response = await fetch(endpoint, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${s.key || ''}`,
-                    'HTTP-Referer': 'https://fancy-ai.os',
-                    'X-Title': 'Fancy AI'
-                },
+                headers: headers,
                 body: JSON.stringify({
                     model: s.model || 'meta-llama/Llama-3-70b-chat',
                     messages: messages,

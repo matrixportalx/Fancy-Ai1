@@ -74,8 +74,9 @@ const MessengerApp = {
             .chat-input-area { padding: 12px 16px; background: rgba(20,20,22,0.95); border-top: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column; gap: 8px; }
             .input-row { display: flex; gap: 10px; align-items: flex-end; }
             .chat-field { flex: 1; background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.08); padding: 12px 18px; border-radius: 20px; color: white; outline: none; font-family: inherit; font-size: 0.95rem; resize: none; max-height: 150px; min-height: 44px; }
-            .btn-send, .btn-attach { background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border: none; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; margin-bottom: 2px; }
+            .btn-send, .btn-attach, .btn-mic { background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border: none; width: 44px; height: 44px; border-radius: 50%; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; flex-shrink: 0; margin-bottom: 2px; }
             .btn-attach { background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.1); }
+            .btn-mic.listening { background: var(--danger); animation: pulse 1.5s infinite; }
 
             /* Attachment Preview */
             .attachment-preview { position: relative; width: 60px; height: 60px; border-radius: 10px; overflow: hidden; border: 2px solid var(--accent); }
@@ -114,23 +115,30 @@ const MessengerApp = {
                         <div style="font-weight: 700; color: white; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${char.name}</div>
                         <div style="font-size: 0.6rem; color: var(--accent); font-weight:700;">Tap to Switch Character</div>
                     </div>
+                    <button onclick="MessengerApp.showMemories()" style="background:none; border:none; font-size:1.1rem; cursor:pointer; padding:0 4px;" title="Memories">🧠</button>
                     <button onclick="MessengerApp.deleteCurrentChat()" style="background:none; border:none; color:#ef4444; font-size:0.7rem; font-weight:700;">Clear</button>
                 </div>
                 <div id="chatViewport" class="chat-viewport"></div>
 
                 <div class="chat-input-area">
                     <div id="img2imgControls" style="display: none;">
-                        <div class="denoise-control">
+                        <div id="denoiseSliderRow" class="denoise-control">
                             <label>Denoising: <span id="valDenoise">0.75</span></label>
                             <input type="range" id="inputDenoise" min="0.05" max="1.0" step="0.05" value="0.75" oninput="document.getElementById('valDenoise').innerText = this.value">
                         </div>
-                        <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <div style="display: flex; gap: 8px; margin-bottom: 8px; align-items: center;">
                             <div class="attachment-preview" id="attachPreview">
                                 <img id="attachImg" src="">
                                 <button class="btn-remove-attach" onclick="MessengerApp.clearAttachment()">✕</button>
                             </div>
-                            <div style="flex:1; color: var(--accent); font-size: 0.75rem; font-style: italic; display: flex; align-items: center;">
-                                Img2Img Mode Active
+                            <div style="flex:1; display:flex; flex-direction:column; gap:4px;">
+                                <div style="color: var(--accent); font-size: 0.75rem; font-style: italic; font-weight:700;" id="imgModeLabel">
+                                    Img2Img Mode Active
+                                </div>
+                                <label style="display:flex; align-items:center; gap:6px; cursor:pointer;">
+                                    <input type="checkbox" id="chkVisionMode" style="width:14px; height:14px; accent-color:var(--accent);" onchange="MessengerApp.toggleImgMode()">
+                                    <span style="color:var(--text-muted); font-size:0.7rem; font-weight:700;">Vision (AI looks at image)</span>
+                                </label>
                             </div>
                         </div>
                     </div>
@@ -139,6 +147,7 @@ const MessengerApp = {
                         <button class="btn-attach" onclick="document.getElementById('chatFileInput').click()">📷</button>
                         <input type="file" id="chatFileInput" hidden accept="image/*" onchange="MessengerApp.handleFileSelect(event)">
                         <textarea id="chatInputField" class="chat-field" placeholder="Message..." rows="1" enterkeyhint="enter"></textarea>
+                        <button id="btnMic" class="btn-mic" onclick="MessengerApp.toggleVoiceInput()" style="background:rgba(255,255,255,0.1); border:1px solid rgba(255,255,255,0.1);">🎙️</button>
                         <button class="btn-send" onclick="MessengerApp.submitUserMessage()">→</button>
                     </div>
                 </div>
@@ -310,7 +319,14 @@ const MessengerApp = {
             const bubble = document.createElement('div');
             bubble.className = `bubble bubble-${isUser ? 'user' : 'ai'}`;
 
-            if (msg.type === 'img2img') {
+            if (isUser && msg.type === 'vision' && msg.attachment) {
+                bubble.innerHTML = `
+                    <div class="img-container" style="margin-bottom:8px;">
+                        <img src="${msg.attachment}" style="width:100%; display:block; border-radius:12px;" onclick="if(window.ImagingApp) ImagingApp.openLocalLightbox(this.src)">
+                    </div>
+                    ${OS.formatMarkdown(msg.text)}
+                `;
+            } else if (msg.type === 'img2img') {
                 let srcBefore = msg.source;
                 let srcAfter = msg.text;
                 if (srcBefore && srcBefore.startsWith('db:') && window.ImageDB) srcBefore = await window.ImageDB.get(srcBefore);
@@ -319,11 +335,11 @@ const MessengerApp = {
                     <div class="compare-grid">
                         <div class="compare-item">
                             <span class="compare-label">Source</span>
-                            <img src="${srcBefore}" style="width:100%; display:block;" onclick="if(window.ImagingApp) ImagingApp.openLocalLightbox(this.src)">
+                            <img src="${srcBefore}" style="width:100%; display:block;" onclick="if(window.ImagingApp) ImagingApp.openLocalLightbox(this.src, '${msg.source}')">
                         </div>
                         <div class="compare-item">
                             <span class="compare-label">Result</span>
-                            <img src="${srcAfter}" style="width:100%; display:block;" onclick="if(window.ImagingApp) ImagingApp.openLocalLightbox(this.src)">
+                            <img src="${srcAfter}" style="width:100%; display:block;" onclick="if(window.ImagingApp) ImagingApp.openLocalLightbox(this.src, '${msg.text}')">
                         </div>
                     </div>
                 `;
@@ -334,7 +350,7 @@ const MessengerApp = {
                 }
                 bubble.innerHTML = `
                     <div class="img-container">
-                        <img src="${src}" style="width:100%; display:block;" onclick="if(window.ImagingApp) ImagingApp.openLocalLightbox(this.src)">
+                        <img src="${src}" style="width:100%; display:block;" onclick="if(window.ImagingApp) ImagingApp.openLocalLightbox(this.src, '${msg.text}')">
                         <div class="img-actions">
                             <button class="btn-img-action" onclick="MessengerApp.remixImage('${msg.text}')">✨ Remix</button>
                         </div>
@@ -346,9 +362,19 @@ const MessengerApp = {
 
             contentWrap.appendChild(bubble);
 
-            // Action buttons: Copy (always) + Delete (always) + Regenerate (AI only)
+            // Action buttons: Copy (always) + Delete (always) + Regenerate (AI only) + Speak (AI only)
             const actionsDiv = document.createElement('div');
             actionsDiv.className = `bubble-actions ${!isUser ? 'bubble-actions-left' : ''}`;
+
+            // Speak button (AI messages only)
+            if (!isUser && msg.type !== 'image' && msg.type !== 'img2img') {
+                const speakBtn = document.createElement('button');
+                speakBtn.className = 'btn-msg-action';
+                speakBtn.title = 'Read aloud';
+                speakBtn.textContent = '🔊';
+                speakBtn.onclick = () => OS.speak(msg.text);
+                actionsDiv.appendChild(speakBtn);
+            }
 
             // Copy button
             const copyBtn = document.createElement('button');
@@ -398,15 +424,71 @@ const MessengerApp = {
         if (input) input.focus();
     },
 
+    // --- Voice Input ---
+    isListening: false,
+    toggleVoiceInput: function() {
+        if (this.isListening) {
+            OS.stopListening();
+            this.setListeningUI(false);
+        } else {
+            const input = document.getElementById('chatInputField');
+            input.placeholder = "Listening...";
+            this.setListeningUI(true);
+            OS.listen(
+                (text) => {
+                    input.value = text;
+                    input.placeholder = "Message...";
+                    this.setListeningUI(false);
+                    this.submitUserMessage();
+                },
+                (status, code) => {
+                    if (status === 'error' || status === 'end') {
+                        this.setListeningUI(false);
+                        input.placeholder = "Message...";
+                    }
+                }
+            );
+        }
+    },
+
+    setListeningUI: function(active) {
+        this.isListening = active;
+        const btn = document.getElementById('btnMic');
+        if (!btn) return;
+        if (active) {
+            btn.classList.add('listening');
+            btn.style.background = 'var(--danger)';
+            btn.innerHTML = '🛑';
+        } else {
+            btn.classList.remove('listening');
+            btn.style.background = 'rgba(255,255,255,0.1)';
+            btn.innerHTML = '🎙️';
+        }
+    },
+
+    toggleImgMode: function() {
+        const isVision = document.getElementById('chkVisionMode').checked;
+        const sliderRow = document.getElementById('denoiseSliderRow');
+        const label = document.getElementById('imgModeLabel');
+        if (isVision) {
+            if (sliderRow) sliderRow.style.display = 'none';
+            if (label) { label.innerText = "Vision Mode Active"; label.style.color = "#22c55e"; }
+        } else {
+            if (sliderRow) sliderRow.style.display = 'flex';
+            if (label) { label.innerText = "Img2Img Mode Active"; label.style.color = "var(--accent)"; }
+        }
+    },
+
     submitUserMessage: async function() {
         const input = document.getElementById('chatInputField');
         const text = input.value;
         const denoiseInput = document.getElementById('inputDenoise');
         const denoise = denoiseInput ? parseFloat(denoiseInput.value) : 0.75;
+        const isVision = document.getElementById('chkVisionMode')?.checked || false;
 
         if (!text.trim() && !this.attachedImage) return;
 
-        const isImg2Img = !!this.attachedImage;
+        const isImg2Img = this.attachedImage && !isVision;
         const currentAttach = this.attachedImage;
 
         input.value = ""; input.style.height = 'auto';
@@ -415,9 +497,15 @@ const MessengerApp = {
         const msg = {
             id: 'm'+Date.now(),
             sender: 'user',
-            text: text || (isImg2Img ? "[Img2Img Request]" : ""),
+            text: text || (isImg2Img ? "[Img2Img Request]" : "[Vision Request]"),
             timestamp: Date.now()
         };
+
+        if (currentAttach) {
+            msg.type = isVision ? 'vision' : 'img2img';
+            // For vision, we might want to show the image in the chat bubble too
+            if (isVision) msg.attachment = currentAttach;
+        }
 
         if (!State.sessions[this.activeCharId]) State.sessions[this.activeCharId] = [];
         State.sessions[this.activeCharId].push(msg);
@@ -426,6 +514,8 @@ const MessengerApp = {
 
         if (isImg2Img) {
             this.handleImg2ImgRequest(text, currentAttach, denoise);
+        } else if (currentAttach && isVision) {
+            this.generateAIResponse(text, currentAttach);
         } else {
             this.generateAIResponse(text);
         }
@@ -478,7 +568,7 @@ const MessengerApp = {
         }
     },
 
-    generateAIResponse: async function(userText) {
+    generateAIResponse: async function(userText, imageBase64 = null) {
         const viewport = document.getElementById('chatViewport');
         const aiId = 'ai' + Date.now();
         const char = State.characters.find(c => c.id === this.activeCharId) || { name: "Assistant" };
@@ -519,7 +609,7 @@ const MessengerApp = {
                 bubble.classList.remove('bubble-typing');
                 bubble.innerHTML = OS.formatMarkdown(chunk);
                 viewport.scrollTop = viewport.scrollHeight;
-            });
+            }, true, 'chat', imageBase64);
 
             // If streaming never fired (empty response), ensure typing indicator is removed
             bubble.classList.remove('bubble-typing');
@@ -540,6 +630,15 @@ const MessengerApp = {
             const aiMsg = { id: aiId, sender: 'ai', text: finalText, timestamp: Date.now() };
             State.sessions[this.activeCharId].push(aiMsg);
             State.save();
+
+            // Mark messenger as read since user is actively viewing
+            if (OS.activeApp === 'MessengerApp' && OS.markAppRead) OS.markAppRead('MessengerApp');
+
+            // Update home screen badge if user is NOT in messenger (background chat)
+            if (OS.activeApp !== 'MessengerApp' && OS.updateBadges) OS.updateBadges();
+
+            // Extract memories from this conversation turn (fire-and-forget)
+            this.extractMemories(userText, finalText);
 
             // Handle image generation after saving the AI message
             if (imagePrompt && window.ImagingApp) {
@@ -597,44 +696,174 @@ const MessengerApp = {
         }
     },
 
-    copyMessage: function(msg) {
-        let textToCopy = msg.text;
-        // For image/img2img messages, copy the image type description
-        if (msg.type === 'image') textToCopy = '[Generated Image]';
-        else if (msg.type === 'img2img') textToCopy = '[Img2Img Transform]';
-        else if (msg.text) textToCopy = msg.text;
+    // --- Memory Extraction ---
+    // After each conversation turn, extract memorable facts about the user
+    extractMemories: function(userText, aiResponse) {
+        // Only extract if there's meaningful content
+        if (!userText || userText.length < 10) return;
+        // Don't extract from img2img requests
+        if (userText === '[Img2Img Request]') return;
 
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-            navigator.clipboard.writeText(textToCopy).catch(() => {
-                this._fallbackCopy(textToCopy);
-            });
+        // Throttle: only extract every ~5 messages to reduce API calls
+        const session = State.sessions[this.activeCharId] || [];
+        const recentUserMsgs = session.filter(m => m.sender === 'user').length;
+        if (recentUserMsgs % 3 !== 0) return; // Extract every 3rd user message
+
+        const char = State.characters.find(c => c.id === this.activeCharId);
+        if (!char) return;
+
+        // Fire-and-forget: extract memories via a lightweight LLM call
+        const doExtract = async () => {
+            try {
+                const api = window.API;
+                if (!api || !State.settings.key) return;
+
+                const existingMemories = State.getMemories(this.activeCharId);
+                const memoryContext = existingMemories.length > 0
+                    ? `\n\nExisting memories (don't repeat these):\n${existingMemories.map(m => '- ' + m.text).join('\n')}`
+                    : '';
+
+                const extractionPrompt = `Analyze this conversation exchange and extract any NEW memorable facts about the user that the character should remember for future conversations. Focus on: personal preferences, important life events, relationships, personality traits, hobbies, work/school details, health info, goals, or significant experiences.
+
+User said: "${userText}"
+Character replied: "${aiResponse}"${memoryContext}
+
+Rules:
+- Only extract facts about the USER, not the character
+- Each fact should be a short, specific sentence (max 15 words)
+- Output each fact on a new line
+- Prefix each line with a category tag: [preference], [fact], [event], [relationship], or [general]
+- If nothing memorable was shared, output exactly: NONE
+- Do NOT repeat existing memories
+- Do NOT include generic observations like "user is talking" or "user asked a question"
+
+Examples:
+[preference] Loves spicy food and Thai cuisine
+[fact] Works as a software engineer at a startup
+[event] Moving to a new apartment next week
+[relationship] Has a younger sister named Maria
+[general] Plays guitar in free time`;
+
+                const result = await api.sendMessage(this.activeCharId, extractionPrompt, null, false, 'chat');
+                if (!result || result.trim().toUpperCase() === 'NONE') return;
+
+                // Parse the extracted memories
+                const lines = result.split('\n').filter(l => l.trim());
+                for (const line of lines) {
+                    const match = line.match(/\[(preference|fact|event|relationship|general)\]\s*(.+)/i);
+                    if (match) {
+                        const category = match[1].toLowerCase();
+                        const text = match[2].trim();
+                        if (text && text.length > 5 && text.length < 100) {
+                            State.addMemory(this.activeCharId, text, category);
+                        }
+                    }
+                }
+            } catch(e) {
+                console.warn("Memory extraction failed:", e);
+            }
+        };
+
+        // Delay extraction to not interfere with the main conversation flow
+        setTimeout(doExtract, 2000);
+    },
+
+    // --- Memory Viewer ---
+    showMemories: function() {
+        const existing = document.getElementById('memoryOverlay');
+        if (existing) existing.remove();
+
+        const char = State.characters.find(c => c.id === this.activeCharId) || { name: 'Character' };
+        const memories = State.getMemories(this.activeCharId);
+
+        const categoryEmoji = {
+            preference: '💜',
+            fact: '📌',
+            event: '📅',
+            relationship: '❤️',
+            general: '🧠'
+        };
+
+        let memoriesHtml = '';
+        if (memories.length === 0) {
+            memoriesHtml = '<div style="text-align:center; color:var(--text-muted); padding:30px; font-style:italic;">No memories yet.<br>Chat more and memories will form automatically!</div>';
         } else {
-            this._fallbackCopy(textToCopy);
+            memoriesHtml = memories.map(m => {
+                const emoji = categoryEmoji[m.category] || '🧠';
+                const age = State.formatMemoryAge(m.timestamp);
+                return `
+                    <div style="display:flex; align-items:flex-start; gap:8px; padding:10px 12px; border-radius:10px; background:rgba(255,255,255,0.02); border:1px solid var(--border);">
+                        <span style="font-size:1rem; flex-shrink:0;">${emoji}</span>
+                        <div style="flex:1; min-width:0;">
+                            <div style="font-size:0.85rem; color:white; line-height:1.4;">${m.text}</div>
+                            <div style="font-size:0.65rem; color:var(--text-muted); margin-top:3px;">${m.category} · ${age}</div>
+                        </div>
+                        <button onclick="MessengerApp.deleteMemory('${m.id}')" style="background:none; border:none; color:#ef4444; font-size:0.8rem; cursor:pointer; padding:2px 6px; flex-shrink:0;">✕</button>
+                    </div>
+                `;
+            }).join('');
         }
 
-        // Show toast notification
-        const existing = document.querySelector('.toast-copied');
-        if (existing) existing.remove();
-        const toast = document.createElement('div');
-        toast.className = 'toast-copied';
-        toast.textContent = '📋 Copied!';
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 1600);
+        const overlay = document.createElement('div');
+        overlay.id = 'memoryOverlay';
+        overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; z-index:99998; display:flex; align-items:flex-start; justify-content:center; padding-top:60px; background:rgba(0,0,0,0.6); backdrop-filter:blur(6px);';
+        overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+        const sheet = document.createElement('div');
+        sheet.style.cssText = 'background:#1a1a1e; border-radius:20px; padding:16px; min-width:260px; max-width:360px; width:85%; box-shadow:0 20px 60px rgba(0,0,0,0.6); border:1px solid rgba(255,255,255,0.06); max-height:70vh; overflow-y:auto;';
+        sheet.onclick = (e) => e.stopPropagation();
+
+        sheet.innerHTML = `
+            <div style="font-size:1rem; font-weight:800; color:var(--accent); margin-bottom:4px; text-align:center;">🧠 Memories</div>
+            <div style="font-size:0.75rem; color:var(--text-muted); text-align:center; margin-bottom:14px;">What ${char.name} remembers about you</div>
+            <div style="display:flex; gap:8px; margin-bottom:14px;">
+                <button onclick="MessengerApp.addMemoryManual()" style="flex:1; padding:8px; background:var(--accent); color:white; border:none; border-radius:10px; font-weight:700; font-size:0.8rem; cursor:pointer;">+ Add Memory</button>
+                <button onclick="MessengerApp.clearAllMemories()" style="padding:8px 12px; background:rgba(239,68,68,0.1); color:#ef4444; border:1px solid rgba(239,68,68,0.2); border-radius:10px; font-weight:700; font-size:0.8rem; cursor:pointer;">🗑️</button>
+            </div>
+            <div style="display:flex; flex-direction:column; gap:6px; max-height:50vh; overflow-y:auto;">
+                ${memoriesHtml}
+            </div>
+        `;
+
+        overlay.appendChild(sheet);
+        document.body.appendChild(overlay);
     },
 
-    _fallbackCopy: function(text) {
-        const textarea = document.createElement('textarea');
-        textarea.value = text;
-        textarea.style.position = 'fixed';
-        textarea.style.opacity = '0';
-        document.body.appendChild(textarea);
-        textarea.select();
-        try { document.execCommand('copy'); } catch(e) {}
-        document.body.removeChild(textarea);
+    addMemoryManual: function() {
+        OS.prompt("Add a memory (what should this character remember about you?):", "", (text) => {
+            if (!text || text.length < 3) return;
+            State.addMemory(this.activeCharId, text, 'general');
+            this.showMemories(); // Refresh the view
+        });
     },
 
+    deleteMemory: function(memoryId) {
+        State.deleteMemory(this.activeCharId, memoryId);
+        this.showMemories(); // Refresh
+    },
+
+    clearAllMemories: function() {
+        OS.confirm("Clear all memories for this character?", () => {
+            State.clearMemories(this.activeCharId);
+            this.showMemories(); // Refresh
+        }, { title: 'Clear Memories', confirmText: 'Clear All', danger: true });
+    },
+
+    // --- Clear Chat ---
+    deleteCurrentChat: function() {
+        const char = State.characters.find(c => c.id === this.activeCharId) || { name: 'Chat' };
+        OS.confirm(`Clear all messages with ${char.name}?`, () => {
+            State.sessions[this.activeCharId] = [];
+            State.save();
+            this.renderChatLog();
+            OS.toast("Chat cleared", 'success');
+        }, { title: 'Clear Chat', confirmText: 'Clear', danger: true });
+    },
+
+    // --- Delete Single Message ---
     deleteMessage: function(msgId) {
-        const session = State.sessions[this.activeCharId] || [];
+        const session = State.sessions[this.activeCharId];
+        if (!session) return;
         const idx = session.findIndex(m => m.id === msgId);
         if (idx === -1) return;
         session.splice(idx, 1);
@@ -642,36 +871,61 @@ const MessengerApp = {
         this.renderChatLog();
     },
 
+    // --- Copy Message ---
+    copyMessage: function(msg) {
+        const text = msg.text || '';
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+            navigator.clipboard.writeText(text).then(() => {
+                OS.toast("Copied!", 'success');
+            }).catch(() => {
+                this._fallbackCopy(text);
+            });
+        } else {
+            this._fallbackCopy(text);
+        }
+    },
+
+    _fallbackCopy: function(text) {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        try {
+            document.execCommand('copy');
+            OS.toast("Copied!", 'success');
+        } catch(e) {
+            OS.toast("Copy failed", 'error');
+        }
+        document.body.removeChild(ta);
+    },
+
+    // --- Regenerate AI Message ---
     regenerateMessage: function(msgId) {
-        const session = State.sessions[this.activeCharId] || [];
+        const session = State.sessions[this.activeCharId];
+        if (!session) return;
         const idx = session.findIndex(m => m.id === msgId);
         if (idx === -1) return;
 
-        // Find the last user message before this AI message to use as prompt
-        let userPrompt = "";
+        // Find the user message that preceded this AI message
+        let userText = '';
         for (let i = idx - 1; i >= 0; i--) {
             if (session[i].sender === 'user') {
-                userPrompt = session[i].text;
+                userText = session[i].text;
                 break;
             }
         }
 
-        // Remove this AI message and all messages after it
-        session.splice(idx);
+        // Remove the AI message from state
+        session.splice(idx, 1);
         State.save();
         this.renderChatLog();
 
-        // Regenerate if we have a prompt
-        if (userPrompt) {
-            this.generateAIResponse(userPrompt);
+        // Re-generate the response
+        if (userText) {
+            this.generateAIResponse(userText);
         }
     },
-
-    deleteCurrentChat: function() {
-        if (!confirm("Clear history?")) return;
-        State.sessions[this.activeCharId] = [];
-        State.save();
-        this.renderChatLog();
-    }
 };
 window.MessengerApp = MessengerApp;
