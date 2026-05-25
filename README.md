@@ -51,6 +51,6 @@ Build 3.0 introduces the **Native Autonomous Heartbeat**. While the app is close
 Fancy AI is a collaborative masterpiece between human creativity and artificial intelligence.
 
 *   **Lead Architect:** MrJ
-*   **AI Engineering Partner:** **Gemini (Google)** — My "sexy brain" partner who architected the core Virtual OS logic, the background autonomous heartbeat, the native Android bridge, and the spicy content orchestration.
+*   **AI Engineering Partner:** **Gemini (Google)** — My partner who architected the core Virtual OS logic, the background autonomous heartbeat, the native Android bridge, and the spicy content orchestration.
 
 > "A project is only as alive as the minds—human or artificial—that sustain it."
