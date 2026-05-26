@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-android {
+extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
     namespace = "com.mrj.fancyai"
     compileSdk = 36
 
