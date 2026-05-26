@@ -2,7 +2,7 @@ plugins {
     alias(libs.plugins.android.application)
 }
 
-android {
+extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
     namespace = "com.mrj.fancyai"
     compileSdk = 36
 
@@ -11,7 +11,7 @@ android {
         minSdk = 24
         targetSdk = 36
         versionCode = 2
-        versionName = "3.0.0"
+        versionName = "3.0.2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
