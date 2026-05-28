@@ -9,13 +9,25 @@ extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
     defaultConfig {
         applicationId = "com.mrj.fancyai"
         minSdk = 24
-        targetSdk = 36
+        targetSdk = 35
         versionCode = 2
         versionName = "3.0.4"
+        ndkVersion = "27.2.12479018"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters.addAll(listOf("arm64-v8a", "armeabi-v7a"))
+        }
+        packagingOptions {
+            resources {
+                pickFirsts += setOf("lib/arm64-v8a/libc++_shared.so", "lib/armeabi-v7a/libc++_shared.so")
+            }
+        }
+    }
+
+    packaging {
+        resources {
+            pickFirsts += setOf("lib/arm64-v8a/libc++_shared.so", "lib/armeabi-v7a/libc++_shared.so")
         }
     }
 
