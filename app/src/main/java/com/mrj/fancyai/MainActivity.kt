@@ -55,6 +55,7 @@ class MainActivity : AppCompatActivity() {
     private var mPendingIntent: Intent? = null
     private lateinit var assetLoader: WebViewAssetLoader
     private lateinit var fileService: FileService
+    private lateinit var modelManager: ModelManager
 
     private var tts: TextToSpeech? = null
     private var speechRecognizer: SpeechRecognizer? = null
@@ -91,59 +92,37 @@ class MainActivity : AppCompatActivity() {
             return@registerForActivityResult
         }
         val fileName = getFileName(uri) ?: "model_${System.currentTimeMillis()}.gguf"
-        
+
         try {
             contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
         } catch (e: Exception) {
             Log.w("FancyAI", "takePersistableUriPermission failed: ${e.message}")
         }
+
         Thread {
             try {
-                val modelsDir = File(filesDir, "models").apply { mkdirs() }
-                val destFile = File(modelsDir, fileName)
-                runOnUiThread { myWebView.evaluateJavascript("OS.toast('Copying $fileName, please wait...', 'info')", null) }
-                (contentResolver.openInputStream(uri)
-                    ?: throw Exception("InputStream is null for uri: $uri")).use { input ->
-                    FileOutputStream(destFile).use { output ->
-                        val buf = ByteArray(131072)
-                        var n: Int
-                        var total = 0L
-                        while (input.read(buf).also { n = it } != -1) {
-                            output.write(buf, 0, n)
-                            total += n
-                            if (total % (256L * 1024 * 1024) == 0L)
-                                Log.d("FancyAI", "Copied ${total / (1024 * 1024)}MB")
-                        }
-                        Log.d("FancyAI", "GGUF copied: ${total / (1024 * 1024)}MB → $destFile")
-                    }
-                }
-                runOnUiThread { myWebView.evaluateJavascript("OS.toast('Loading model...', 'info')", null) }
+                sendToJs("OS.toast('Copying $fileName, please wait...', 'info')")
                 val svcIntent = Intent(this, FancyAiForegroundService::class.java).apply {
                     putExtra("content", "Loading AI model: $fileName")
                 }
                 ContextCompat.startForegroundService(this, svcIntent)
-                var ok = false
-                try {
-                    ok = LlamaInference.loadModel(destFile.absolutePath)
-                    if (ok) {
-                        getSharedPreferences("fancy_ai", MODE_PRIVATE).edit()
-                            .putString("last_model_path", destFile.absolutePath).apply()
-                    }
-                } catch (t: Throwable) {
-                    Log.e("FancyAI", "Critical error in LlamaInference.loadModel: ${t.message}", t)
+                val ok = try {
+                    modelManager.copyAndLoadFromUri(uri, fileName)
                 } finally {
                     stopService(svcIntent)
                 }
-                val msg = if (ok) "OS.toast('Model loaded!', 'success')" else "OS.toast('Copy done but load failed', 'error')"
                 runOnUiThread {
-                    myWebView.evaluateJavascript(msg, null)
+                    myWebView.evaluateJavascript(
+                        if (ok) "OS.toast('Model loaded!', 'success')" else "OS.toast('Copy done but load failed', 'error')",
+                        null
+                    )
                     if (ok) {
                         myWebView.evaluateJavascript("if(window.SettingsApp) SettingsApp.autoDetectTemplate('$fileName')", null)
                     }
                     myWebView.evaluateJavascript("if(window.SettingsApp) SettingsApp.updateLlamaStatus()", null)
                 }
             } catch (e: Exception) {
-                Log.e("FancyAI", "GGUF copy failed: ${e.message}", e)
+                Log.e("FancyAI", "Model picker failed: ${e.message}", e)
                 val safeMsg = (e.message ?: "unknown error").replace("'", "")
                 runOnUiThread { myWebView.evaluateJavascript("OS.toast('Error: $safeMsg', 'error')", null) }
             }
@@ -212,6 +191,7 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         myWebView = findViewById(R.id.webview)
         fileService = FileService(applicationContext)
+        modelManager = ModelManager(applicationContext, ::sendToJs)
 
         assetLoader = WebViewAssetLoader.Builder()
             .setDomain("media.fancy.ai")
@@ -229,21 +209,6 @@ class MainActivity : AppCompatActivity() {
         settings.mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
 
         myWebView.addJavascriptInterface(WebAppInterface(), "AndroidBridge")
-
-        // Wire C++ streaming callbacks → WebView JS
-        LlamaInference.streamBridge = object : LlamaInference.StreamBridge {
-            override fun onToken(cbId: Int, token: String) {
-                val escaped = token
-                    .replace("\\", "\\\\")
-                    .replace("\"", "\\\"")
-                    .replace("\n", "\\n")
-                    .replace("\r", "\\r")
-                sendToJs("(function(){var f=window._llamaToken&&window._llamaToken[$cbId];if(f)f(\"$escaped\");})()")
-            }
-            override fun onDone(cbId: Int) {
-                sendToJs("(function(){var f=window._llamaDone&&window._llamaDone[$cbId];if(f){delete window._llamaToken[$cbId];delete window._llamaDone[$cbId];f();}})()")
-            }
-        }
 
         myWebView.webViewClient = object : WebViewClient() {
             override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
@@ -273,10 +238,6 @@ class MainActivity : AppCompatActivity() {
             if (ok) runOnUiThread { Toast.makeText(this, "Saved to Downloads/FancyAI", Toast.LENGTH_SHORT).show() }
             else runOnUiThread { Toast.makeText(this, "Save failed", Toast.LENGTH_SHORT).show() }
         }
-
-        // Pre-initialize LlamaInference to avoid thread deadlocks during native library load
-        Log.d("FancyAI", "Pre-initializing LlamaInference...")
-        LlamaInference.isModelLoaded()
 
         myWebView.loadUrl("file:///android_asset/index.html")
 
@@ -600,45 +561,19 @@ class MainActivity : AppCompatActivity() {
 
         @Suppress("unused")
         @JavascriptInterface
-        fun llamaLoadModel(modelPath: String): Boolean = LlamaInference.loadModel(modelPath)
+        fun llamaLoadModel(modelPath: String): Boolean = modelManager.loadModel(modelPath)
 
         @Suppress("unused")
         @JavascriptInterface
-        fun llamaLoadModelByName(fileName: String): Boolean {
-            val file = File(File(filesDir, "models"), fileName)
-            val ok = if (file.exists()) LlamaInference.loadModel(file.absolutePath) else false
-            if (ok) {
-                getSharedPreferences("fancy_ai", MODE_PRIVATE).edit()
-                    .putString("last_model_path", file.absolutePath).apply()
-            }
-            return ok
-        }
+        fun llamaLoadModelByName(fileName: String): Boolean = modelManager.loadModelByName(fileName)
 
         @Suppress("unused")
         @JavascriptInterface
-        fun llamaListModels(): String {
-            return try {
-                val dir = File(filesDir, "models")
-                if (!dir.exists() || !dir.isDirectory) return "[]"
-                val files = dir.listFiles { _, name -> name.endsWith(".gguf") } ?: emptyArray()
-                val names = files.map { it.name.replace("\"", "\\\"") }
-                "[${names.joinToString(",") { "\"$it\"" }}]"
-            } catch (_: Exception) { "[]" }
-        }
+        fun llamaListModels(): String = modelManager.listModels()
 
         @Suppress("unused")
         @JavascriptInterface
-        fun llamaDeleteModel(fileName: String): Boolean {
-            return try {
-                val file = File(File(filesDir, "models"), fileName)
-                if (file.exists()) {
-                    if (LlamaInference.getLoadedModelPath() == file.absolutePath) {
-                        LlamaInference.unloadModel()
-                    }
-                    file.delete()
-                } else false
-            } catch (_: Exception) { false }
-        }
+        fun llamaDeleteModel(fileName: String): Boolean = modelManager.deleteModel(fileName)
 
         @Suppress("unused")
         @JavascriptInterface
@@ -654,86 +589,46 @@ class MainActivity : AppCompatActivity() {
         @Suppress("unused")
         @JavascriptInterface
         fun llamaCopyAndLoad(contentUriStr: String): Boolean {
-            return try {
-                val uri = Uri.parse(contentUriStr)
-                val modelsDir = File(filesDir, "models").apply { mkdirs() }
-                val destFile = File(modelsDir, "model.gguf")
-                Log.d("FancyAI", "Copying GGUF from: $contentUriStr")
-                val input = contentResolver.openInputStream(uri) ?: run {
-                    Log.e("FancyAI", "Failed to open input stream for: $contentUriStr")
-                    return false
-                }
-                input.use { stream ->
-                    FileOutputStream(destFile).use { output ->
-                        val buf = ByteArray(65536)
-                        var n: Int
-                        var total = 0L
-                        while (stream.read(buf).also { n = it } != -1) {
-                            output.write(buf, 0, n)
-                            total += n
-                        }
-                        Log.d("FancyAI", "Copied ${total / (1024 * 1024)}MB → ${destFile.absolutePath}")
-                    }
-                }
-                LlamaInference.loadModel(destFile.absolutePath)
-            } catch (e: Exception) {
-                Log.e("FancyAI", "llamaCopyAndLoad failed: ${e.message}", e)
-                false
-            }
+            val uri = Uri.parse(contentUriStr)
+            return modelManager.copyAndLoadFromUri(uri, "model.gguf")
         }
 
         @Suppress("unused")
         @JavascriptInterface
-        fun llamaUnloadModel() = LlamaInference.unloadModel()
+        fun llamaUnloadModel() = modelManager.unloadModel()
 
         @Suppress("unused")
         @JavascriptInterface
-        fun llamaIsModelLoaded(): Boolean = LlamaInference.isModelLoaded()
+        fun llamaIsModelLoaded(): Boolean = modelManager.isModelLoaded()
 
         @Suppress("unused")
         @JavascriptInterface
-        fun llamaGetLoadedModelPath(): String? = LlamaInference.getLoadedModelPath()
+        fun llamaGetLoadedModelPath(): String? = modelManager.getLoadedModelPath()
 
         @Suppress("unused")
         @JavascriptInterface
-        fun llamaGetChatTemplate(): String = LlamaInference.getChatTemplate()
+        fun llamaGetChatTemplate(): String = modelManager.getChatTemplate()
 
-        /**
-         * JS calls this with a JS-generated integer cbId.
-         * Before calling, JS sets up:
-         *   window._llamaToken[cbId] = (token) => { ... }
-         *   window._llamaDone[cbId]  = ()      => { ... }
-         */
         @Suppress("unused")
         @JavascriptInterface
         fun llamaInferenceAsync(prompt: String, maxTokens: Int, callbackId: Int,
                                 temperature: Float, topK: Int, topP: Float) {
-            Thread {
-                LlamaInference.inferenceStream(prompt, maxTokens, callbackId, temperature, topK, topP)
-            }.start()
+            modelManager.inferenceAsync(prompt, maxTokens, callbackId, temperature, topK, topP)
         }
 
         @Suppress("unused")
         @JavascriptInterface
-        fun llamaCancelInference() = LlamaInference.cancelInference()
+        fun llamaCancelInference() = modelManager.cancelInference()
 
-        // Async so the UI (e.g. returning to the home screen) never blocks waiting
-        // for an in-flight decode to release the native inference lock.
         @Suppress("unused")
         @JavascriptInterface
-        fun llamaUnloadModelAsync() {
-            LlamaInference.cancelInference()
-            Thread { LlamaInference.unloadModel() }.start()
-        }
+        fun llamaUnloadModelAsync() = modelManager.unloadModelAsync()
 
-        // Update engine params and reinitialize context if model is loaded.
-        // Context params (nCtx, nThreads, flashAttn) apply immediately.
-        // Model params (useMmap, useMlock) take effect on next model load.
         @Suppress("unused")
         @JavascriptInterface
         fun llamaSetEngineParams(nCtx: Int, nThreads: Int, flashAttn: Boolean,
                                  useMmap: Boolean, useMlock: Boolean, gpuLayers: Int, backend: Int, kvType: Int) {
-            LlamaInference.setEngineParams(nCtx, nThreads, flashAttn, useMmap, useMlock, gpuLayers, backend, kvType)
+            modelManager.setEngineParams(nCtx, nThreads, flashAttn, useMmap, useMlock, gpuLayers, backend, kvType)
         }
 
         // Fully restart the process. Switching inference hardware (CPU/NPU/GPU)
