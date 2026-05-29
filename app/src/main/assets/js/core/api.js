@@ -222,6 +222,9 @@ Return ONLY the JSON object. No preamble or markdown code blocks.
             if (!endpoint.endsWith('/chat/completions') && !endpoint.endsWith('/generate')) {
                 endpoint = endpoint.replace(/\/$/, '') + '/v1/chat/completions';
             }
+        } else if (provider === 'llama') {
+            // On-device llama.cpp — no endpoint needed, uses native Android bridge
+            endpoint = null;
         } else {
             throw new Error(`Unknown provider: ${provider}`);
         }
