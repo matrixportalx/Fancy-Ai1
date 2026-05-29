@@ -423,12 +423,21 @@ Java_com_mrj_fancyai_LlamaInference_nativeInferenceStream(JNIEnv* env, jclass cl
         if (prefill_ok && !g_cancel.load()) {
             const int n_max = (max_tokens > 0) ? (int)max_tokens : 512;
             char piece_buf[256];
+            std::string batched_output;  // Batch tokens to reduce JNI overhead
+            const int batch_size = 5;    // Call back every 5 tokens instead of every token
 
             for (int i = 0; i < n_max && !g_cancel.load(); ++i) {
                 llama_token id = llama_sampler_sample(g_sampler, g_ctx, -1);
 
                 if (llama_vocab_is_eog(vocab, id)) {
                     LOGD("EOS at step %d", i);
+                    // Flush any remaining batched output
+                    if (!batched_output.empty()) {
+                        jstring j_batch = env->NewStringUTF(batched_output.c_str());
+                        env->CallStaticVoidMethod(g_inference_cls, g_on_token_mid, cb_id, j_batch);
+                        env->DeleteLocalRef(j_batch);
+                        batched_output.clear();
+                    }
                     break;
                 }
 
@@ -437,15 +446,28 @@ Java_com_mrj_fancyai_LlamaInference_nativeInferenceStream(JNIEnv* env, jclass cl
                 if (len < 0) len = 0;
                 piece_buf[len] = '\0';
 
-                jstring j_piece = env->NewStringUTF(piece_buf);
-                env->CallStaticVoidMethod(g_inference_cls, g_on_token_mid, cb_id, j_piece);
-                env->DeleteLocalRef(j_piece);
+                batched_output.append(piece_buf);
+
+                // Only callback every batch_size tokens (5x reduction in JNI calls)
+                if (batched_output.length() > 64 || (i + 1) % batch_size == 0) {
+                    jstring j_batch = env->NewStringUTF(batched_output.c_str());
+                    env->CallStaticVoidMethod(g_inference_cls, g_on_token_mid, cb_id, j_batch);
+                    env->DeleteLocalRef(j_batch);
+                    batched_output.clear();
+                }
 
                 llama_batch next = llama_batch_get_one(&id, 1);
                 if (llama_decode(g_ctx, next) != 0) {
                     LOGE("llama_decode failed at step %d", i);
                     break;
                 }
+            }
+
+            // Flush any remaining output
+            if (!batched_output.empty()) {
+                jstring j_batch = env->NewStringUTF(batched_output.c_str());
+                env->CallStaticVoidMethod(g_inference_cls, g_on_token_mid, cb_id, j_batch);
+                env->DeleteLocalRef(j_batch);
             }
 
             // Clear KV cache for next call if we don't support incremental yet
