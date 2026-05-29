@@ -528,7 +528,7 @@ const ImagingApp = {
 
             try {
                 const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => reject(new Error('Forge request timeout. Server not responding at ' + forgeUrl)), 60000);
+                    setTimeout(() => reject(new Error('Forge request timeout. Server not responding at ' + forgeUrl)), 180000);
                 });
                 const fetchPromise = fetch(endpoint, {
                     method: 'POST',
