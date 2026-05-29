@@ -20,57 +20,331 @@ const ContactsApp = {
         style.id = styleId;
         style.innerHTML = `
             /* ─── List View ─── */
-            .contacts-wrap { height: 100%; display: flex; flex-direction: column; background: var(--bg-dark); }
-            .contacts-header { padding: 14px 16px; display: flex; justify-content: space-between; align-items: center; position: sticky; top: 0; z-index: 10; background: rgba(11,11,13,0.95); backdrop-filter: blur(12px); border-bottom: 1px solid var(--border); padding-top: calc(14px + env(safe-area-inset-top)); }
-            .contacts-title { font-size: 1.1rem; font-weight: 800; color: white; }
-            .contacts-header-actions { display: flex; gap: 8px; align-items: center; }
-            .btn-contacts-import { background: var(--bg-input); border: 1px solid var(--border); color: var(--text-muted); padding: 7px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; cursor: pointer; }
-            .btn-contacts-new { background: var(--accent); border: none; color: white; padding: 7px 14px; border-radius: 20px; font-size: 0.78rem; font-weight: 700; cursor: pointer; box-shadow: 0 2px 10px rgba(139,92,246,0.3); }
+            .contacts-wrap { height: 100%; display: flex; flex-direction: column; background: var(--md-surface); }
+            .contacts-header {
+                padding: 14px 16px;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                position: sticky;
+                top: 0;
+                z-index: 10;
+                background: var(--md-surface-container-low);
+                border-bottom: 1px solid var(--md-outline-variant);
+                padding-top: calc(14px + env(safe-area-inset-top));
+            }
+            .contacts-title {
+                font-size: 1.2rem;
+                font-weight: 700;
+                color: var(--md-on-surface);
+            }
+            .contacts-header-actions { display: flex; gap: 10px; align-items: center; }
+            .btn-contacts-import {
+                background: transparent;
+                border: 1px solid var(--md-outline-variant);
+                color: var(--md-on-surface-variant);
+                padding: 8px 14px;
+                border-radius: 20px;
+                font-size: 0.75rem;
+                font-weight: 600;
+                cursor: pointer;
+                transition: all 0.2s;
+            }
+            .btn-contacts-import:active {
+                background: rgba(208,188,255,0.1);
+                color: var(--md-primary);
+            }
+            .btn-contacts-new {
+                background: var(--md-primary);
+                border: none;
+                color: var(--md-on-primary);
+                padding: 8px 16px;
+                border-radius: 20px;
+                font-size: 0.75rem;
+                font-weight: 600;
+                cursor: pointer;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 8px rgba(0,0,0,0.2);
+                transition: all 0.2s;
+            }
+            .btn-contacts-new:active {
+                box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+                transform: scale(0.96);
+            }
 
-            .contacts-list { flex: 1; overflow-y: auto; padding-bottom: 100px; }
-            .char-item { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-bottom: 1px solid var(--border); cursor: pointer; transition: background 0.1s; }
-            .char-item:active { background: var(--bg-card); }
-            .char-item-avatar { width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, #1e1b4b, #312e81); display: flex; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 800; color: rgba(255,255,255,0.35); overflow: hidden; flex-shrink: 0; }
-            .char-item-avatar img { width: 100%; height: 100%; object-fit: cover; }
+            .contacts-list { flex: 1; overflow-y: auto; padding: 8px 0; padding-bottom: 100px; }
+            .char-item {
+                display: flex;
+                align-items: center;
+                gap: 14px;
+                padding: 14px 16px;
+                cursor: pointer;
+                transition: background 0.15s;
+            }
+            .char-item:active {
+                background: rgba(208,188,255,0.08);
+            }
+            .char-item-avatar {
+                width: 54px;
+                height: 54px;
+                border-radius: 50%;
+                background: var(--md-surface-container-high);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 1.4rem;
+                font-weight: 700;
+                color: var(--md-primary);
+                overflow: hidden;
+                flex-shrink: 0;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+            }
+            .char-item-avatar img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
             .char-item-info { flex: 1; min-width: 0; }
-            .char-item-name { font-weight: 700; color: white; font-size: 0.98rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; }
-            .char-item-handle { font-size: 0.72rem; color: var(--accent); font-weight: 600; margin-bottom: 3px; }
-            .char-item-preview { font-size: 0.78rem; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-            .char-item-arrow { color: var(--border); font-size: 0.85rem; flex-shrink: 0; margin-left: 4px; }
+            .char-item-name {
+                font-weight: 600;
+                color: var(--md-on-surface);
+                font-size: 0.98rem;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                margin-bottom: 4px;
+            }
+            .char-item-handle {
+                font-size: 0.72rem;
+                color: var(--md-primary);
+                font-weight: 600;
+                margin-bottom: 3px;
+            }
+            .char-item-preview {
+                font-size: 0.75rem;
+                color: var(--md-on-surface-variant);
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+            .char-item-arrow {
+                color: var(--md-outline-variant);
+                font-size: 0.9rem;
+                flex-shrink: 0;
+                margin-left: 4px;
+            }
 
             /* ─── Profile View ─── */
-            .p-scroll { height: 100%; overflow-y: auto; background: var(--bg-dark); padding-bottom: 100px; }
+            .p-scroll {
+                height: 100%;
+                overflow-y: auto;
+                background: var(--md-surface);
+                padding-bottom: 100px;
+            }
 
-            .p-hero { position: relative; height: 150px; overflow: hidden; display: flex; align-items: flex-end; justify-content: center; background: linear-gradient(135deg, #1e1b4b 0%, #2d1f4b 50%, #1a1a2e 100%); }
-            .p-hero-bg { position: absolute; inset: 0; filter: blur(24px) brightness(0.35) saturate(1.5); background-size: cover; background-position: center; }
-            .p-hero-avatar-container { position: relative; display: flex; flex-direction: column; align-items: center; padding-bottom: 0; transform: translateY(40px); }
-            .p-avatar-ring { width: 88px; height: 88px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.12); overflow: hidden; background: #1a1a2e; display: flex; align-items: center; justify-content: center; font-size: 2.2rem; box-shadow: 0 8px 28px rgba(0,0,0,0.6); }
-            .p-avatar-ring img { width: 100%; height: 100%; object-fit: cover; }
+            .p-hero {
+                position: relative;
+                height: 180px;
+                overflow: visible;
+                display: flex;
+                align-items: flex-end;
+                justify-content: center;
+                background: linear-gradient(135deg, rgba(79,55,139,0.3) 0%, rgba(51,46,81,0.25) 100%);
+            }
+            .p-hero-bg {
+                position: absolute;
+                inset: 0;
+                filter: blur(20px) brightness(0.4);
+                background-size: cover;
+                background-position: center;
+            }
+            .p-hero-avatar-container {
+                position: relative;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                transform: translateY(48px);
+            }
+            .p-avatar-ring {
+                width: 96px;
+                height: 96px;
+                border-radius: 50%;
+                border: 3px solid var(--md-outline-variant);
+                overflow: hidden;
+                background: var(--md-surface-container-high);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                font-size: 2.4rem;
+                font-weight: 700;
+                color: var(--md-primary);
+                box-shadow: 0 3px 6px rgba(0,0,0,0.4), 0 6px 12px rgba(0,0,0,0.3);
+            }
+            .p-avatar-ring img {
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
 
-            .p-body { padding: 52px 16px 16px; display: flex; flex-direction: column; gap: 14px; }
-            .p-name-block { text-align: center; margin-bottom: 2px; }
-            .p-name { font-size: 1.25rem; font-weight: 800; color: white; }
-            .p-handle { font-size: 0.8rem; color: var(--accent); font-weight: 600; margin-top: 2px; }
+            .p-body {
+                padding: 56px 16px 16px;
+                display: flex;
+                flex-direction: column;
+                gap: 16px;
+            }
+            .p-name-block {
+                text-align: center;
+                margin-bottom: 4px;
+            }
+            .p-name {
+                font-size: 1.3rem;
+                font-weight: 700;
+                color: var(--md-on-surface);
+                letter-spacing: 0.3px;
+            }
+            .p-handle {
+                font-size: 0.8rem;
+                color: var(--md-primary);
+                font-weight: 600;
+                margin-top: 4px;
+                letter-spacing: 0.5px;
+            }
 
-            .btn-gen-avatar { background: linear-gradient(135deg, #8b5cf6, #6366f1); color: white; border: none; padding: 9px 18px; border-radius: 12px; font-size: 0.8rem; font-weight: 700; cursor: pointer; align-self: center; box-shadow: 0 4px 14px rgba(139,92,246,0.3); transition: opacity 0.15s; }
-            .btn-gen-avatar:disabled { opacity: 0.5; cursor: wait; }
+            .btn-gen-avatar {
+                background: var(--md-primary-container);
+                color: var(--md-on-primary-container);
+                border: none;
+                padding: 10px 20px;
+                border-radius: var(--shape-full);
+                font-size: 0.8rem;
+                font-weight: 600;
+                cursor: pointer;
+                align-self: center;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 8px rgba(0,0,0,0.2);
+                transition: all 0.2s;
+            }
+            .btn-gen-avatar:active {
+                box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+                transform: scale(0.96);
+            }
+            .btn-gen-avatar:disabled {
+                opacity: 0.5;
+                cursor: wait;
+            }
 
-            .p-section { background: var(--bg-card); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; }
-            .p-section-row { padding: 12px 14px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 5px; }
-            .p-section-row:last-child { border-bottom: none; }
-            .field-label { font-size: 0.66rem; color: var(--text-muted); font-weight: 800; text-transform: uppercase; letter-spacing: 0.7px; }
-            .field-input, .field-area { background: transparent; border: none; color: white; padding: 0; outline: none; font-size: 0.92rem; font-family: inherit; width: 100%; }
-            .field-area { resize: none; line-height: 1.5; }
-            .toggle-row { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
-            .toggle-row label { font-size: 0.85rem; color: var(--text-muted); font-weight: 600; cursor: pointer; flex: 1; }
+            .p-section {
+                background: var(--md-surface-container-low);
+                border: 1px solid var(--md-outline-variant);
+                border-radius: var(--shape-lg);
+                overflow: hidden;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+            }
+            .p-section-row {
+                padding: 16px;
+                border-bottom: 1px solid var(--md-outline-variant);
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+            }
+            .p-section-row:last-child {
+                border-bottom: none;
+            }
+            .field-label {
+                font-size: 0.65rem;
+                color: var(--md-on-surface-variant);
+                font-weight: 700;
+                text-transform: uppercase;
+                letter-spacing: 0.8px;
+            }
+            .field-input, .field-area {
+                background: transparent;
+                border: none;
+                border-bottom: 2px solid var(--md-outline-variant);
+                color: var(--md-on-surface);
+                padding: 8px 0;
+                outline: none;
+                font-size: 0.92rem;
+                font-family: inherit;
+                width: 100%;
+                transition: border-color 0.2s;
+            }
+            .field-input:focus, .field-area:focus {
+                border-bottom-color: var(--md-primary);
+            }
+            .field-input::placeholder, .field-area::placeholder {
+                color: var(--md-on-surface-variant);
+                opacity: 0.7;
+            }
+            .field-area {
+                resize: none;
+                line-height: 1.6;
+                min-height: 60px;
+            }
+            .toggle-row {
+                display: flex;
+                align-items: center;
+                gap: 12px;
+                padding: 14px 0;
+            }
+            .toggle-row input[type="checkbox"] {
+                accent-color: var(--md-primary);
+                cursor: pointer;
+            }
+            .toggle-row label {
+                font-size: 0.88rem;
+                color: var(--md-on-surface);
+                font-weight: 500;
+                cursor: pointer;
+                flex: 1;
+            }
 
-            .p-actions { display: flex; gap: 10px; }
-            .p-action-btn { border: none; padding: 14px; border-radius: 16px; font-weight: 700; font-size: 0.88rem; cursor: pointer; flex: 1; transition: opacity 0.12s; }
-            .p-action-btn:active { opacity: 0.7; }
-            .btn-p-save { background: var(--accent); color: white; }
-            .btn-p-chat { background: var(--bg-input); color: white; border: 1px solid var(--border) !important; }
-            .btn-p-dossier { background: rgba(139,92,246,0.1); color: var(--accent); border: 1px solid rgba(139,92,246,0.25) !important; }
-            .btn-p-delete { background: rgba(239,68,68,0.07); color: #f87171; border: 1px solid rgba(239,68,68,0.2) !important; flex: 0 0 auto !important; padding: 14px 16px !important; }
+            .p-action-btn-save {
+                background: var(--md-primary);
+                color: var(--md-on-primary);
+                border: none;
+                padding: 12px 24px;
+                border-radius: var(--shape-lg);
+                font-weight: 600;
+                font-size: 0.85rem;
+                cursor: pointer;
+                transition: all 0.2s;
+                box-shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 8px rgba(0,0,0,0.2);
+            }
+            .p-action-btn-save:active {
+                box-shadow: 0 6px 12px rgba(0,0,0,0.4);
+                transform: scale(0.96);
+            }
+
+            .p-actions {
+                display: flex;
+                gap: 10px;
+                margin-top: 8px;
+            }
+            .p-action-btn {
+                border: 1px solid var(--md-outline-variant);
+                background: transparent;
+                color: var(--md-on-surface);
+                padding: 12px 16px;
+                border-radius: var(--shape-lg);
+                font-weight: 600;
+                font-size: 0.8rem;
+                cursor: pointer;
+                flex: 1;
+                transition: all 0.2s;
+            }
+            .p-action-btn:active {
+                background: rgba(208,188,255,0.1);
+                border-color: var(--md-primary);
+                color: var(--md-primary);
+            }
+            .btn-p-delete {
+                flex: 0 0 auto !important;
+                padding: 12px 14px !important;
+                border-color: var(--md-error) !important;
+                color: var(--md-error) !important;
+            }
+            .btn-p-delete:active {
+                background: rgba(242,184,181,0.15) !important;
+            }
         `;
         document.head.appendChild(style);
     },
@@ -124,14 +398,15 @@ const ContactsApp = {
         }
     },
 
-    showProfile: async function(charId) {
+    showProfile: async function(charId, restoreFn) {
         const char = State.characters.find(c => c.id === charId);
         if (!char) return;
 
         if (window.OS) {
             const oldTitle = document.getElementById('os-app-title').innerText;
             document.getElementById('os-app-title').innerText = char.name;
-            OS.pushView(() => {
+            // When opened from the chat hub, restoreFn re-renders that chat on back.
+            OS.pushView(restoreFn ? restoreFn : () => {
                 document.getElementById('os-app-title').innerText = oldTitle;
                 this.renderList();
             });
@@ -177,12 +452,12 @@ const ContactsApp = {
                         </div>
                     </div>
 
-                    <button class="p-action-btn btn-p-save" onclick="ContactsApp.save('${char.id}')">💾 Save Identity</button>
+                    <button class="p-action-btn-save" onclick="ContactsApp.save('${char.id}')">💾 Save Identity</button>
 
                     <div class="p-actions">
-                        <button class="p-action-btn btn-p-chat" onclick="OS.launch('MessengerApp', { charId: '${char.id}' })">💬 Chat</button>
-                        <button class="p-action-btn btn-p-dossier" onclick="ContactsApp.showDossier('${char.id}')">📂 Dossier</button>
-                        <button class="p-action-btn btn-p-delete" onclick="ContactsApp.delete('${char.id}')">🗑️</button>
+                        <button class="p-action-btn" onclick="OS.launch('MessengerApp', { charId: '${char.id}' })">💬 Chat</button>
+                        <button class="p-action-btn" onclick="ContactsApp.showDossier('${char.id}')">📂 Dossier</button>
+                        ${char.id !== 'root' ? `<button class="p-action-btn btn-p-delete" onclick="ContactsApp.delete('${char.id}')">🗑️</button>` : ''}
                     </div>
                 </div>
             </div>
@@ -203,6 +478,7 @@ const ContactsApp = {
     generateAvatar: async function(charId) {
         const char = State.characters.find(c => c.id === charId);
         if (!char) return;
+        if (window.OS && OS.guardBusy("⏳ Please wait — a task is still running.")) return;
 
         const btn = document.getElementById('btnGenAvatar');
         const ring = document.getElementById('pAvatarRing');
@@ -257,7 +533,7 @@ const ContactsApp = {
         OS.goBack();
     },
 
-    importCharacter: function(event) {
+    importCharacter: function(event, onDone) {
         const file = event.target.files[0];
         if (!file) return;
 
@@ -330,7 +606,7 @@ const ContactsApp = {
 
                     State.save();
                     OS.toast(`Imported ${name}!`, 'success');
-                    this.renderList();
+                    if (onDone) onDone(); else this.renderList();
                 } catch (err) {
                     console.error("PNG import failed:", err);
                     OS.toast("Import failed: " + err.message, 'error');
@@ -369,7 +645,7 @@ const ContactsApp = {
 
                     State.save();
                     OS.toast(`Imported ${name}!`, 'success');
-                    this.renderList();
+                    if (onDone) onDone(); else this.renderList();
                 } catch (err) {
                     console.error("JSON import failed:", err);
                     OS.toast("Import failed: invalid JSON", 'error');
@@ -379,7 +655,7 @@ const ContactsApp = {
         }
     },
 
-    newCharacter: function() {
+    newCharacter: function(onDone) {
         OS.prompt("Character Name:", "", (name) => {
             if (!name || !name.trim()) return;
             const id = 'c' + Date.now();
@@ -393,11 +669,12 @@ const ContactsApp = {
                 virtual_gallery: []
             });
             State.save();
-            this.renderList();
+            if (onDone) onDone(); else this.renderList();
         });
     },
 
     delete: function(charId) {
+        if (charId === 'root') { OS.toast("Root doesn't leave.", 'warning'); return; }
         if (State.characters.length <= 1) { OS.toast("Must have at least one character.", 'warning'); return; }
         OS.confirm("Delete this character? Their avatar and session images will also be removed.", () => {
             const char = State.characters.find(c => c.id === charId);
@@ -432,7 +709,14 @@ const ContactsApp = {
             delete State.sessions[charId];
             if (State.dossiers) delete State.dossiers[charId];
             State.save();
-            OS.goBack();
+            // The chat/profile we came from now points at a deleted character.
+            // Unwind every pushed view back to the contact list in one step
+            // (the list's restore runs last, so that's what stays on screen).
+            if (OS.navStack && OS.navStack.length > 0 && window.MessengerApp && OS.activeApp === 'MessengerApp') {
+                history.go(-OS.navStack.length);
+            } else {
+                OS.goBack();
+            }
         });
     },
 
@@ -445,34 +729,34 @@ const ContactsApp = {
 
         const overlay = document.createElement('div');
         overlay.id = 'dossierOverlay';
-        overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; z-index:99998; display:flex; align-items:flex-start; justify-content:center; padding-top:60px; background:rgba(0,0,0,0.75); backdrop-filter:blur(10px);';
+        overlay.style.cssText = 'position:fixed; top:0; left:0; right:0; bottom:0; z-index:99998; display:flex; align-items:flex-start; justify-content:center; padding-top:60px; background:rgba(0,0,0,0.6); backdrop-filter:blur(10px);';
         overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
 
         const sheet = document.createElement('div');
-        sheet.style.cssText = 'background:#0d0d0f; border-radius:22px; padding:20px; width:90%; max-width:400px; box-shadow:0 20px 60px rgba(0,0,0,0.8); border:1px solid rgba(139,92,246,0.25); max-height:80vh; overflow-y:auto; font-family:monospace;';
+        sheet.style.cssText = 'background:var(--md-surface-container-high); border-radius:var(--shape-xl); padding:20px; width:90%; max-width:420px; box-shadow:0 3px 6px rgba(0,0,0,0.4), 0 6px 12px rgba(0,0,0,0.3); border:1px solid var(--md-outline-variant); max-height:80vh; overflow-y:auto;';
         sheet.onclick = (e) => e.stopPropagation();
 
         const esc = s => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
         const renderSection = (title, data) => {
-            let section = `<div style="margin-bottom:14px;"><div style="color:#555; font-size:0.68rem; font-weight:900; text-transform:uppercase; letter-spacing:1px; margin-bottom:6px;">${title}</div>`;
+            let section = `<div style="margin-bottom:16px;"><div style="color:var(--md-on-surface-variant); font-size:0.65rem; font-weight:700; text-transform:uppercase; letter-spacing:0.8px; margin-bottom:8px;">${title}</div>`;
             if (typeof data === 'object' && !Array.isArray(data)) {
                 for (const key in data) {
-                    section += `<div style="display:flex; gap:10px; margin-bottom:4px; font-size:0.78rem;"><span style="color:var(--accent); flex-shrink:0;">${esc(key.replace(/_/g, ' '))}:</span><span style="color:#ccc;">${esc(data[key])}</span></div>`;
+                    section += `<div style="display:flex; gap:10px; margin-bottom:6px; font-size:0.8rem;"><span style="color:var(--md-primary); flex-shrink:0;">${esc(key.replace(/_/g, ' '))}:</span><span style="color:var(--md-on-surface);">${esc(data[key])}</span></div>`;
                 }
             } else if (Array.isArray(data)) {
-                data.forEach(item => { section += `<div style="color:#ccc; font-size:0.78rem; margin-bottom:3px;">• ${esc(item)}</div>`; });
+                data.forEach(item => { section += `<div style="color:var(--md-on-surface); font-size:0.8rem; margin-bottom:4px;">• ${esc(item)}</div>`; });
             } else {
-                section += `<div style="color:#ccc; font-size:0.78rem;">${esc(data)}</div>`;
+                section += `<div style="color:var(--md-on-surface); font-size:0.8rem;">${esc(data)}</div>`;
             }
             return section + '</div>';
         };
 
-        let html = `<div style="color:var(--accent); font-size:1rem; font-weight:900; margin-bottom:16px; padding-bottom:10px; border-bottom:1px solid #222;">📂 ${char.name.toUpperCase()}'S DOSSIER</div>`;
+        let html = `<div style="color:var(--md-primary); font-size:1.05rem; font-weight:700; margin-bottom:18px; padding-bottom:12px; border-bottom:1px solid var(--md-outline-variant);">📂 ${char.name.toUpperCase()}'S DOSSIER</div>`;
         html += renderSection("Relationship Status", dossier.relationship || "Stranger");
         if (dossier.user_traits && Object.keys(dossier.user_traits).length) html += renderSection("User Knowledge", dossier.user_traits);
         if (dossier.world_facts && Object.keys(dossier.world_facts).length) html += renderSection("World Intelligence", dossier.world_facts);
         if (dossier.milestones && dossier.milestones.length) html += renderSection("Timeline Milestones", dossier.milestones);
-        html += `<button style="width:100%; margin-top:6px; padding:12px; background:#1a1a1e; border:1px solid #333; color:#888; border-radius:12px; font-weight:700; cursor:pointer; font-family:monospace;" onclick="document.getElementById('dossierOverlay').remove()">CLOSE</button>`;
+        html += `<button style="width:100%; margin-top:12px; padding:12px; background:transparent; border:1px solid var(--md-outline-variant); color:var(--md-on-surface); border-radius:var(--shape-lg); font-weight:600; cursor:pointer; font-size:0.8rem;" onclick="document.getElementById('dossierOverlay').remove()">CLOSE</button>`;
 
         sheet.innerHTML = html;
         overlay.appendChild(sheet);

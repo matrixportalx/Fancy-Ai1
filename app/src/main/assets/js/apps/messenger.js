@@ -13,6 +13,10 @@ const MessengerApp = {
         this.container = container;
         this.injectStyles();
 
+        // Contacts management (profile / new / import / dossier) is delegated to
+        // ContactsApp, which is no longer launched directly from home.
+        if (!window.ContactsApp) { try { await OS._loadScript('js/apps/contacts.js'); } catch (e) {} }
+
         if (!history.state || history.state.app !== 'MessengerApp') {
             history.replaceState({ app: 'MessengerApp' }, "", "#MessengerApp");
         }
@@ -121,14 +125,20 @@ const MessengerApp = {
         this.currentView = 'list';
 
         if (document.getElementById('os-app-title')) {
-            document.getElementById('os-app-title').innerText = "Messages";
+            document.getElementById('os-app-title').innerText = "Contacts";
         }
 
         this.container.innerHTML = `
             <div class="chat-wrapper">
                 <div class="conv-list-header">
-                    <div style="font-weight: 800; font-size: 1.15rem; color: white;">Messages</div>
-                    <button onclick="OS.launch('ContactsApp')" style="background:#2a3942; border:none; color:#8ea8b5; padding:7px 13px; border-radius:20px; font-size:0.8rem; font-weight:700; cursor:pointer;">+ New Chat</button>
+                    <div style="font-weight: 800; font-size: 1.15rem; color: white;">Contacts</div>
+                    <div style="display:flex; gap:8px; align-items:center;">
+                        <label style="background:#2a3942; color:#8ea8b5; padding:7px 12px; border-radius:20px; font-size:0.8rem; font-weight:700; cursor:pointer; margin:0;">
+                            📥 Import
+                            <input type="file" style="display:none" accept=".json,.png" onchange="MessengerApp.importCharacter(event)">
+                        </label>
+                        <button onclick="MessengerApp.newCharacter()" style="background:#00a884; border:none; color:white; padding:7px 13px; border-radius:20px; font-size:0.8rem; font-weight:700; cursor:pointer;">+ New</button>
+                    </div>
                 </div>
                 <div class="conv-list" id="convList"></div>
             </div>
@@ -235,7 +245,7 @@ const MessengerApp = {
                     <div class="chat-avatar" id="chatHeaderAvatar" onclick="MessengerApp.showCharacterProfile()" style="cursor:pointer;">${char.name[0]}</div>
                     <div style="flex: 1; display:flex; flex-direction:column; cursor:pointer; overflow:hidden;" onclick="MessengerApp.showCharacterProfile()">
                         <div style="font-weight: 700; color: #e9edef; font-size: 0.95rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${char.name}</div>
-                        <div style="font-size: 0.62rem; color: #6a7e8a; font-weight: 500;">online</div>
+                        <div id="chatHeaderStatus" style="font-size: 0.62rem; color: #6a7e8a; font-weight: 500;"></div>
                     </div>
                     <div style="display:flex; gap:4px; align-items:center;">
                         <button id="btnEvolve" onclick="MessengerApp.triggerManualEvolution()" style="background:none; border:none; font-size:1.05rem; cursor:pointer; color:#6a7e8a; width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;" title="Evolve Dossier">🌀</button>
@@ -366,16 +376,31 @@ const MessengerApp = {
     },
 
     showCharacterProfile: function() {
-        if (window.ContactsApp) {
-            const oldTitle = document.getElementById('os-app-title').innerText;
-            OS.pushView(() => {
-                document.getElementById('os-app-title').innerText = oldTitle;
-                this.render();
-                this.renderChatLog();
-            });
-            window.ContactsApp.init(this.container);
-            window.ContactsApp.showProfile(this.activeCharId);
-        }
+        if (!window.ContactsApp) return;
+        const oldTitle = document.getElementById('os-app-title').innerText;
+        ContactsApp.container = this.container;
+        ContactsApp.injectStyles();
+        // Open the editable profile as a sub-view; back from it returns to this chat.
+        ContactsApp.showProfile(this.activeCharId, () => {
+            document.getElementById('os-app-title').innerText = oldTitle;
+            this.render();
+            this.renderChatLog();
+        });
+    },
+
+    // --- Contact management (delegated to ContactsApp, refreshing this hub) ---
+    newCharacter: async function() {
+        if (!window.ContactsApp) { try { await OS._loadScript('js/apps/contacts.js'); } catch (e) {} }
+        if (!window.ContactsApp) { OS.toast("Could not load contacts module", 'error'); return; }
+        ContactsApp.container = this.container;
+        ContactsApp.newCharacter(() => this.renderConversationList());
+    },
+
+    importCharacter: async function(event) {
+        if (!window.ContactsApp) { try { await OS._loadScript('js/apps/contacts.js'); } catch (e) {} }
+        if (!window.ContactsApp) { OS.toast("Could not load contacts module", 'error'); return; }
+        ContactsApp.container = this.container;
+        ContactsApp.importCharacter(event, () => this.renderConversationList());
     },
 
     renderChatLog: async function(includeArchive = false) {
@@ -570,6 +595,7 @@ const MessengerApp = {
         const isVision = document.getElementById('chkVisionMode')?.checked || false;
 
         if (!text.trim() && !this.attachedImage) return;
+        if (OS.guardBusy("⏳ Please wait — finishing the current task…")) return;
 
         const isImg2Img = this.attachedImage && !isVision;
         const currentAttach = this.attachedImage;
@@ -660,11 +686,33 @@ const MessengerApp = {
 
         this._showStopButton();
 
+        const statusEl = document.getElementById('chatHeaderStatus');
+        const startTs = Date.now();
+        let firstTokenTs = 0, chunkCount = 0;
+
         try {
             const response = await API.sendMessage(this.activeCharId, userText, (chunk) => {
+                if (!firstTokenTs) firstTokenTs = Date.now();
+                chunkCount++;
                 bubble.innerHTML = OS.formatMarkdown(chunk);
+                // Live tokens/sec — exact for on-device (one callback per token),
+                // approximate for cloud streaming (chars/4 floor).
+                const secs = (Date.now() - firstTokenTs) / 1000;
+                if (statusEl && secs > 0.25) {
+                    const approxTokens = Math.max(chunkCount, Math.round(chunk.length / 4));
+                    statusEl.textContent = `typing… ${(approxTokens / secs).toFixed(1)} tok/s`;
+                }
                 viewport.scrollTop = viewport.scrollHeight;
             }, true, 'chat', imageBase64);
+
+            // Text finished streaming — leave the final tok/s shown in the header.
+            if (statusEl) {
+                const secs = (Date.now() - (firstTokenTs || startTs)) / 1000;
+                const approxTokens = Math.max(chunkCount, Math.round((response || '').length / 4));
+                if (secs > 0.2 && approxTokens > 0) {
+                    statusEl.textContent = `${(approxTokens / secs).toFixed(1)} tok/s`;
+                }
+            }
 
             let finalText = response;
             let imagePrompt = null;
@@ -724,6 +772,8 @@ const MessengerApp = {
             }
         } catch (e) {
             bubble.innerHTML = `<span style="color:#f87171;">Error: ${e.message}</span>`;
+            const s = document.getElementById('chatHeaderStatus');
+            if (s) s.textContent = '';
         } finally {
             this._hideStopButton();
         }
@@ -744,7 +794,7 @@ const MessengerApp = {
         const doExtract = async () => {
             try {
                 const api = window.API;
-                if (!api || !State.settings.key) return;
+                if (!api || !api.hasApiKey()) return;
 
                 const existingMemories = State.getMemories(this.activeCharId);
                 const memoryContext = existingMemories.length > 0
@@ -886,6 +936,7 @@ Examples:
     },
 
     regenerateMessage: function(msgId) {
+        if (OS.guardBusy("⏳ Please wait — a task is still running.")) return;
         const session = State.sessions[this.activeCharId];
         if (!session) return;
         const idx = session.findIndex(m => m.id === msgId);
@@ -909,6 +960,7 @@ Examples:
 
     triggerManualEvolution: async function() {
         if (!this.activeCharId) return;
+        if (OS.guardBusy("⏳ Please wait — a task is still running.")) return;
         const btn = document.getElementById('btnEvolve');
         if (btn) { btn.classList.add('spinning'); btn.disabled = true; }
 

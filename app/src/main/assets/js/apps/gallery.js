@@ -140,7 +140,6 @@ const GalleryApp = {
                 <div class="gallery-header">
                     <div class="gallery-title">Gallery</div>
                     <div class="gallery-actions">
-                        <button class="gallery-btn" onclick="GalleryApp.syncRegistry()">🔄 Sync</button>
                         <button class="gallery-btn gallery-btn-danger" onclick="GalleryApp.deleteAllPrompt()">🗑️ Clear All</button>
                     </div>
                 </div>
@@ -323,17 +322,6 @@ const GalleryApp = {
             OS.toast("Gallery wiped clean", "success");
             await this.init(this.container);
         }, { title: 'Wipe Gallery', confirmText: 'DELETE ALL', danger: true });
-    },
-
-    syncRegistry: async function() {
-        if (typeof OS !== 'undefined' && OS.toast) OS.toast("Scanning disk for orphaned files...");
-        const count = await window.ImageDB.rebuildRegistryFromDisk();
-        if (count > 0) {
-            if (typeof OS !== 'undefined' && OS.toast) OS.toast(`Found ${count} new images`, 'success');
-            await this.init(this.container);
-        } else {
-            if (typeof OS !== 'undefined' && OS.toast) OS.toast("Gallery is up to date");
-        }
     },
 
     // Lazy Loading Logic

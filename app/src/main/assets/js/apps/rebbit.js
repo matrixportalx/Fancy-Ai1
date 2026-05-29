@@ -21,14 +21,14 @@ const RebbitApp = {
             const style = document.createElement('style');
             style.id = styleId;
             style.innerHTML = `
-                .rb-wrap { padding: 0; overflow-y: auto; height: 100%; background: #0a0a0b; display: flex; flex-direction: column; padding-bottom: 100px; }
-                .rb-header { background: linear-gradient(135deg, rgba(255,69,0,0.1), rgba(200,50,0,0.05)); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-                .rb-header h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: #ff4500; }
+                .rb-wrap { padding: 0; overflow-y: auto; height: 100%; background: var(--md-surface); display: flex; flex-direction: column; padding-bottom: 100px; }
+                .rb-header { background: rgba(208, 188, 255, 0.08); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+                .rb-header h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--md-primary); }
                 .rb-header span { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #22c55e; box-shadow: 0 0 6px #22c55e; animation: pulse 2s infinite; }
                 .rb-controls { padding: 10px 16px; display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
-                .rb-btn-gen { padding: 10px 20px; font-size: 0.8rem; background: #ff4500; color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(255,69,0,0.3); transition: all 0.2s; }
+                .rb-btn-gen { padding: 10px 20px; font-size: 0.8rem; background: var(--md-primary-container); color: var(--md-on-primary-container); border: none; border-radius: 12px; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(208, 188, 255, 0.3); transition: all 0.2s; }
                 .rb-btn-gen:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(0.5); }
-                .rb-btn-clear { padding: 10px 20px; font-size: 0.8rem; background: rgba(239,68,68,0.15); color: #ef4444; border: 1px solid rgba(239,68,68,0.3); border-radius: 12px; font-weight: 700; cursor: pointer; }
+                .rb-btn-clear { padding: 10px 20px; font-size: 0.8rem; background: #333; color: var(--text-muted); border: none; border-radius: 12px; font-weight: 700; cursor: pointer; }
                 .rb-btn-settings { padding: 10px; font-size: 1rem; background: rgba(255,255,255,0.05); color: var(--text-muted); border: 1px solid var(--border); border-radius: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
                 .rb-btn-settings:hover { background: rgba(255,255,255,0.1); color: white; }
                 .rb-post { padding: 12px 16px; border-bottom: 1px solid var(--border); animation: postFadeIn 0.3s ease; }
@@ -39,7 +39,7 @@ const RebbitApp = {
                 .rb-post-sub { font-size: 0.7rem; color: var(--text-muted); }
                 .rb-post-title { font-weight: 700; color: white; font-size: 0.95rem; margin: 4px 0 6px; }
                 .rb-post-img { width: 100%; border-radius: 8px; cursor: zoom-in; background: #111; display: block; }
-                .rb-post-nsfw { display: inline-block; background: rgba(255,69,0,0.15); color: #ff4500; font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-right: 6px; text-transform: uppercase; }
+                .rb-post-nsfw { display: inline-block; background: rgba(208, 188, 255, 0.15); color: var(--md-primary); font-size: 0.65rem; font-weight: 700; padding: 2px 6px; border-radius: 4px; margin-right: 6px; text-transform: uppercase; }
                 @keyframes postFadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
                 /* Settings overlay */
@@ -50,14 +50,14 @@ const RebbitApp = {
                     background: rgba(0,0,0,0.6); backdrop-filter: blur(6px);
                 }
                 .rb-settings-sheet {
-                    background: #1a1a1e; border-radius: 20px; padding: 16px;
+                    background: var(--md-surface-container-high); border-radius: 20px; padding: 16px;
                     min-width: 260px; max-width: 320px; width: 85%;
                     box-shadow: 0 20px 60px rgba(0,0,0,0.6);
-                    border: 1px solid rgba(255,255,255,0.06);
+                    border: 1px solid var(--md-outline-variant);
                     max-height: 70vh; overflow-y: auto;
                 }
                 .rb-settings-title {
-                    font-size: 1rem; font-weight: 800; color: #ff4500;
+                    font-size: 1rem; font-weight: 800; color: var(--md-primary);
                     margin-bottom: 12px; text-align: center;
                 }
                 .rb-settings-item {
@@ -74,7 +74,7 @@ const RebbitApp = {
                     font-size: 0.7rem; color: transparent;
                 }
                 .rb-settings-check.checked {
-                    background: #ff4500; border-color: #ff4500; color: white;
+                    background: var(--md-primary-container); border-color: var(--md-primary-container); color: var(--md-on-primary-container);
                 }
                 .rb-settings-name { font-weight: 600; color: white; font-size: 0.88rem; flex: 1; }
                 .rb-settings-handle { font-size: 0.7rem; color: var(--text-muted); }
@@ -247,7 +247,8 @@ getAllCategories: function() {
     ];
 },
 
-    generatePost: async function() {
+    generatePost: async function(isAuto) {
+        if (!isAuto && window.OS && OS.guardBusy("⏳ Please wait — a task is still running.")) return;
         const btn = document.getElementById('rbGenBtn');
         if (btn) { btn.disabled = true; btn.innerText = "⏳ Dreaming..."; }
 
@@ -359,7 +360,7 @@ flux prompt: [visual description]
         const post = (State.redditPosts || []).find(p => p.id === postId);
         if (!post) return;
 
-        const userName = (State.settings && State.settings.userName) || 'You';
+        const userName = (State.userProfile && State.userProfile.name) || 'You';
         if (!post.comments) post.comments = [];
         post.comments.push({ charId: 'user', charName: userName, text, isUser: true, timestamp: Date.now() });
         State.save();
@@ -369,9 +370,7 @@ flux prompt: [visual description]
         if (!poster) return;
         try {
             const api = window.API;
-            const provider = (State.settings && State.settings.provider) || 'deepinfra';
-            const hasKey = provider === 'localllm' || State.settings.key;
-            if (!api || !hasKey) return;
+            if (!api || !api.isReady()) return;
             const msg = await api.sendMessage(poster.id, `You are ${poster.name} on ${post.subreddit}. You posted: "${post.title}". ${userName} commented: "${text}". Reply in character (max 15 words). Output ONLY the reply text.`, null, false, 'social');
             if (msg && msg.length > 1) {
                 const freshPost = (State.redditPosts || []).find(p => p.id === postId);
@@ -446,7 +445,7 @@ flux prompt: [visual description]
                 <div id="comments-${p.id}" style="padding-top:10px;"></div>
                 <div style="display:flex; gap:6px; align-items:center; margin-top:8px;">
                     <input type="text" id="comment-input-${p.id}" placeholder="Add a comment..." style="flex:1; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:white; padding:6px 10px; border-radius:20px; font-size:0.82rem; outline:none;" onkeydown="if(event.key==='Enter') RebbitApp.submitComment('${p.id}')">
-                    <button onclick="RebbitApp.submitComment('${p.id}')" style="background:#ff4500; border:none; color:white; padding:6px 12px; border-radius:20px; font-size:0.8rem; font-weight:700; cursor:pointer; flex-shrink:0;">Post</button>
+                    <button onclick="RebbitApp.submitComment('${p.id}')" style="background:var(--md-primary-container); border:none; color:var(--md-on-primary-container); padding:6px 12px; border-radius:20px; font-size:0.8rem; font-weight:700; cursor:pointer; flex-shrink:0;">Post</button>
                 </div>
             `;
             el.appendChild(postDiv);
@@ -463,8 +462,8 @@ flux prompt: [visual description]
                         cDiv.style.borderLeft = '2px solid #1da1f2';
                         cDiv.innerHTML = `<b style="color:#1da1f2; font-size:0.75rem;">u/${c.charName.toLowerCase().replace(/\s/g,'')}</b><br><span style="color:#d1d5db;">${OS.formatMarkdown(c.text)}</span>`;
                     } else {
-                        cDiv.style.borderLeft = '2px solid #ff4500';
-                        cDiv.innerHTML = `<b style="color:#ff4500; font-size:0.75rem;">u/${c.charName.toLowerCase().replace(/\s/g,'')}</b><br><span style="color:#d1d5db;">${OS.formatMarkdown(c.text)}</span>`;
+                        cDiv.style.borderLeft = '2px solid var(--md-primary)';
+                        cDiv.innerHTML = `<b style="color:var(--md-primary); font-size:0.75rem;">u/${c.charName.toLowerCase().replace(/\s/g,'')}</b><br><span style="color:#d1d5db;">${OS.formatMarkdown(c.text)}</span>`;
                     }
                     commentsContainer.appendChild(cDiv);
                 });
@@ -504,10 +503,9 @@ flux prompt: [visual description]
     startAutoPost: function() {
         this.stopAutoPost();
         const s = State.settings || {};
-        if (!s.autoPostEnabled || !s.autoPostRebbit) return;
-        // Check for API key (not needed for localllm provider)
-        const provider = s.provider || 'deepinfra';
-        if (provider !== 'localllm' && !s.key) return;
+        if (!s.autoPostEnabled || !s.autoPostRebbit || s.hideNsfw) return;
+        // Local providers need no key; cloud providers need one.
+        if (!window.API.isReady()) return;
         const interval = (s.autoPostInterval || 5) * 60 * 1000;
         const jitter = interval * (0.7 + Math.random() * 0.6);
         // Stagger the first post: wait 0-60s so multiple feeds don't all hit the server at once
@@ -517,12 +515,12 @@ flux prompt: [visual description]
             this._autoPostTimer = setInterval(() => {
                 if (this._autoPosting) return;
                 this._autoPosting = true;
-                this.generatePost().finally(() => { this._autoPosting = false; });
+                this.generatePost(true).finally(() => { this._autoPosting = false; });
             }, jitter);
             // Also do the first post now
             if (!this._autoPosting) {
                 this._autoPosting = true;
-                this.generatePost().finally(() => { this._autoPosting = false; });
+                this.generatePost(true).finally(() => { this._autoPosting = false; });
             }
         }, initialDelay);
         this.updateAutoPostIndicator();
@@ -541,9 +539,8 @@ flux prompt: [visual description]
         const indicator = document.getElementById('rbAutoPostIndicator');
         if (!indicator) return;
         const s = State.settings || {};
-        const provider = s.provider || 'deepinfra';
-        const hasKey = provider === 'localllm' || s.key;
-        if (s.autoPostEnabled && s.autoPostRebbit && hasKey) {
+        const hasKey = window.API.isReady();
+        if (s.autoPostEnabled && s.autoPostRebbit && hasKey && !s.hideNsfw) {
             indicator.style.display = 'inline-block';
             indicator.title = `Auto-posting every ${s.autoPostInterval || 5} min`;
         } else {

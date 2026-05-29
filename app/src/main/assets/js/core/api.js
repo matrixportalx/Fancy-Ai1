@@ -4,6 +4,44 @@
  */
 window.API = {
     /**
+     * Get API key from secure storage.
+     */
+    getApiKey: function() {
+        if (window.AndroidBridge && window.AndroidBridge.getSecureString) {
+            return window.AndroidBridge.getSecureString('api_key') || '';
+        }
+        return '';
+    },
+
+    /**
+     * Check if API key is configured.
+     */
+    hasApiKey: function() {
+        return this.getApiKey().length > 0;
+    },
+
+    /**
+     * True if the provider runs locally and needs no cloud API key.
+     * 'llama'   = on-device llama.cpp engine
+     * 'localllm' = a local OpenAI-compatible HTTP server (e.g. Termux/llama-server)
+     */
+    isLocalProvider: function(provider) {
+        provider = provider || (window.State && State.settings && State.settings.provider) || 'deepinfra';
+        return provider === 'llama' || provider === 'localllm';
+    },
+
+    /**
+     * True when we have everything needed to dispatch an LLM call:
+     * a local engine (no key required) or a configured cloud key.
+     * Note: this does not guarantee an on-device model is loaded yet —
+     * that is handled lazily by OS.ensureLlamaModelLoaded().
+     */
+    isReady: function() {
+        const provider = (window.State && State.settings && State.settings.provider) || 'deepinfra';
+        return this.isLocalProvider(provider) || this.hasApiKey();
+    },
+
+    /**
      * Helper to replace {{char}} and {{user}} macros in strings.
      */
     applyMacros: function(text, charName, userName) {
@@ -84,11 +122,21 @@ Return ONLY the JSON object. No preamble or markdown code blocks.
 
             if (startIdx !== -1 && endIdx !== -1) {
                 const jsonStr = result.substring(startIdx, endIdx + 1);
-                const newDossier = JSON.parse(jsonStr);
+                const parsed = JSON.parse(jsonStr);
 
-                // Success: Update and Notify
-                State.updateDossier(charId, newDossier);
-                const traitCount = Object.keys(newDossier.user_traits || {}).length;
+                // Merge with the current dossier so a partial/malformed AI response
+                // can't silently wipe existing data. Each field falls back to its
+                // current value if the returned type is wrong.
+                const isObj = v => v && typeof v === 'object' && !Array.isArray(v);
+                const merged = {
+                    relationship: typeof parsed.relationship === 'string' ? parsed.relationship : currentDossier.relationship,
+                    user_traits: isObj(parsed.user_traits) ? parsed.user_traits : currentDossier.user_traits,
+                    world_facts: isObj(parsed.world_facts) ? parsed.world_facts : currentDossier.world_facts,
+                    milestones: Array.isArray(parsed.milestones) ? parsed.milestones : currentDossier.milestones
+                };
+
+                State.updateDossier(charId, merged);
+                const traitCount = Object.keys(merged.user_traits || {}).length;
                 console.log(`API: Dossier Evolved (${traitCount} traits established)`);
                 if (window.OS) OS.toast(`AI evolved: ${traitCount} variables updated`, "success");
             } else {
@@ -106,6 +154,10 @@ Return ONLY the JSON object. No preamble or markdown code blocks.
         if (this._abortController) {
             this._abortController.abort();
             this._abortController = null;
+        }
+        // Cancel local AI inference if running
+        if (window.AndroidBridge && window.AndroidBridge.llamaCancelInference) {
+            window.AndroidBridge.llamaCancelInference();
         }
     },
 
@@ -288,6 +340,110 @@ CRITICAL RULES for "flux prompt:":
         const taskId = 'llm_' + Date.now();
         if (window.OS && window.OS.setTaskActive) OS.setTaskActive(taskId, true, "AI is thinking...");
 
+        // ── Local llama.cpp path ─────────────────────────────────────────────
+        if (provider === 'llama') {
+            if (!window.AndroidBridge || !window.AndroidBridge.llamaIsModelLoaded || !window.AndroidBridge.llamaIsModelLoaded()) {
+                if (window.OS && window.OS.ensureLlamaModelLoaded) {
+                    await window.OS.ensureLlamaModelLoaded();
+                }
+                // Re-check
+                if (!window.AndroidBridge || !window.AndroidBridge.llamaIsModelLoaded || !window.AndroidBridge.llamaIsModelLoaded()) {
+                    if (window.OS && window.OS.setTaskActive) OS.setTaskActive(taskId, false);
+                    throw new Error("Local AI model is not loaded. Go to Settings → Local AI and pick a .gguf file.");
+                }
+            }
+
+            const sysMsg = messages.find(m => m.role === 'system')?.content || '';
+            // Limit history based on user setting (default 8 messages for local AI performance)
+            const historyMsgs = messages.slice(1).slice(-(s.llamaHistoryCap || 8));
+
+            // Read sampler parameters from settings with fallbacks
+            const temperature = s.temperature || 0.7;
+            const topK = s.topK || 40;
+            const topP = s.topP || 0.9;
+            const maxTok = s.maxTokens || 512;
+
+            // Build multi-turn prompt with full conversation history
+            const template = s.llamaTemplate || 'chatml';
+            let prompt = '';
+            switch (template) {
+                case 'llama3':
+                    prompt = `<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n${sysMsg}<|eot_id|>`;
+                    for (const m of historyMsgs) {
+                        const role = m.role === 'user' ? 'user' : 'assistant';
+                        prompt += `<|start_header_id|>${role}<|end_header_id|>\n\n${m.content}<|eot_id|>`;
+                    }
+                    prompt += `<|start_header_id|>assistant<|end_header_id|>\n\n`;
+                    break;
+                case 'gemma':
+                case 'gemma2': {
+                    prompt = `<bos>`;
+                    let firstGemma = true;
+                    for (const m of historyMsgs) {
+                        if (m.role === 'user') {
+                            prompt += `<start_of_turn>user\n${firstGemma && sysMsg ? sysMsg + '\n\n' : ''}${m.content}<end_of_turn>\n`;
+                            firstGemma = false;
+                        } else {
+                            prompt += `<start_of_turn>model\n${m.content}<end_of_turn>\n`;
+                        }
+                    }
+                    prompt += `<start_of_turn>model\n`;
+                    break;
+                }
+                case 'mistral': {
+                    let firstMistral = true;
+                    for (const m of historyMsgs) {
+                        if (m.role === 'user') {
+                            if (firstMistral) {
+                                prompt = `[INST] ${sysMsg ? `<<SYS>>\n${sysMsg}\n<</SYS>>\n\n` : ''}${m.content} [/INST] `;
+                                firstMistral = false;
+                            } else {
+                                prompt += `</s>[INST] ${m.content} [/INST] `;
+                            }
+                        } else {
+                            prompt += m.content;
+                        }
+                    }
+                    break;
+                }
+                case 'alpaca': {
+                    // Alpaca has no multi-turn format; use last user message only
+                    const alpacaUser = historyMsgs.filter(m => m.role === 'user').slice(-1)[0]?.content || userText;
+                    prompt = `### System:\n${sysMsg}\n\n### Instruction:\n${alpacaUser}\n\n### Response:\n`;
+                    break;
+                }
+                default: { // chatml — works for Llama 3, Mistral, Qwen, Phi
+                    prompt = `<|im_start|>system\n${sysMsg || 'You are a helpful assistant.'}<|im_end|>\n`;
+                    for (const m of historyMsgs) {
+                        const role = m.role === 'user' ? 'user' : 'assistant';
+                        prompt += `<|im_start|>${role}\n${m.content}<|im_end|>\n`;
+                    }
+                    prompt += `<|im_start|>assistant\n`;
+                }
+            }
+
+            const llamaResult = await new Promise((resolve) => {
+                const cbId = (window._llamaCbCounter = ((window._llamaCbCounter || 0) + 1) & 0x7fffffff);
+                if (!window._llamaToken) window._llamaToken = {};
+                if (!window._llamaDone)  window._llamaDone  = {};
+                let accumulated = '';
+                window._llamaToken[cbId] = (token) => {
+                    accumulated += token;
+                    if (onUpdate) onUpdate(accumulated);
+                };
+                window._llamaDone[cbId] = () => {
+                    delete window._llamaToken[cbId];
+                    delete window._llamaDone[cbId];
+                    resolve(accumulated);
+                };
+                window.AndroidBridge.llamaInferenceAsync(prompt, maxTok, cbId, temperature, topK, topP);
+            });
+
+            if (window.OS && window.OS.setTaskActive) OS.setTaskActive(taskId, false);
+            return llamaResult;
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         this._abortController = new AbortController();
         const signal = this._abortController.signal;
         let fullContent = "";
@@ -299,8 +455,11 @@ CRITICAL RULES for "flux prompt:":
                 'HTTP-Referer': 'https://fancy-ai.os',
                 'X-Title': 'Fancy AI'
             };
-            if (provider !== 'localllm' && s.key) {
-                headers['Authorization'] = `Bearer ${s.key}`;
+            if (provider !== 'localllm') {
+                const apiKey = this.getApiKey();
+                if (apiKey) {
+                    headers['Authorization'] = `Bearer ${apiKey}`;
+                }
             }
 
             const response = await fetch(endpoint, {
@@ -309,8 +468,8 @@ CRITICAL RULES for "flux prompt:":
                 body: JSON.stringify({
                     model: s.model || 'meta-llama/Llama-3-70b-chat',
                     messages: messages,
-                    temperature: 0.8,
-                    max_tokens: 1000,
+                    temperature: s.temperature || 0.8,
+                    max_tokens: s.maxTokens || 1000,
                     stream: isStreaming
                 }),
                 signal: signal

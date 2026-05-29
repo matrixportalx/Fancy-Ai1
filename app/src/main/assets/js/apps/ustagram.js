@@ -21,11 +21,11 @@ const UstagramApp = {
             const style = document.createElement('style');
             style.id = styleId;
             style.innerHTML = `
-                .ug-wrap { padding: 0; overflow-y: auto; height: 100%; background: #0a0a0b; display: flex; flex-direction: column; padding-bottom: 100px; }
-                .ug-header { background: rgba(255,100,50,0.05); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
-                .ug-header h2 { margin: 0; font-size: 1.1rem; font-weight: 800; background: linear-gradient(135deg, #f58529, #dd2a7b); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+                .ug-wrap { padding: 0; overflow-y: auto; height: 100%; background: var(--md-surface); display: flex; flex-direction: column; padding-bottom: 100px; }
+                .ug-header { background: rgba(208, 188, 255, 0.08); padding: 12px 16px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 8px; }
+                .ug-header h2 { margin: 0; font-size: 1.1rem; font-weight: 800; color: var(--md-primary); }
                 .ug-controls { padding: 10px 16px; display: flex; gap: 8px; justify-content: center; background: rgba(255,255,255,0.02); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
-                .ug-btn-gen { padding: 10px 20px; background: linear-gradient(135deg, #f58529, #dd2a7b); color: white; border: none; border-radius: 12px; font-weight: 700; cursor: pointer; }
+                .ug-btn-gen { padding: 10px 20px; background: var(--md-primary-container); color: var(--md-on-primary-container); border: none; border-radius: 12px; font-weight: 700; cursor: pointer; }
                 .ug-post { padding: 12px 16px; border-bottom: 1px solid var(--border); }
                 .ug-post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
                 .ug-post-avatar { width: 36px; height: 36px; border-radius: 50%; background: #333; overflow: hidden; display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; }
@@ -79,7 +79,7 @@ const UstagramApp = {
                 <div id="comments-${p.id}" style="padding: 0 0 4px 0;"></div>
                 <div style="display:flex; gap:6px; align-items:center; padding: 4px 0 8px 0;">
                     <input type="text" id="comment-input-${p.id}" placeholder="Add a comment..." style="flex:1; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.1); color:white; padding:6px 10px; border-radius:20px; font-size:0.82rem; outline:none;" onkeydown="if(event.key==='Enter') UstagramApp.submitComment('${p.id}')">
-                    <button onclick="UstagramApp.submitComment('${p.id}')" style="background:linear-gradient(135deg,#f58529,#dd2a7b); border:none; color:white; padding:6px 12px; border-radius:20px; font-size:0.8rem; font-weight:700; cursor:pointer; flex-shrink:0;">Post</button>
+                    <button onclick="UstagramApp.submitComment('${p.id}')" style="background:var(--md-primary-container); border:none; color:var(--md-on-primary-container); padding:6px 12px; border-radius:20px; font-size:0.8rem; font-weight:700; cursor:pointer; flex-shrink:0;">Post</button>
                 </div>
             `;
             el.appendChild(postEl);
@@ -92,7 +92,7 @@ const UstagramApp = {
                     cDiv.style.fontSize = '0.82rem';
                     cDiv.style.marginBottom = '2px';
                     if (c.isUser) {
-                        cDiv.innerHTML = `<b style="background:linear-gradient(135deg,#f58529,#dd2a7b); -webkit-background-clip:text; -webkit-text-fill-color:transparent; margin-right:6px;">${c.charName}</b> <span style="color:#e7e9ea;">${OS.formatMarkdown(c.text)}</span>`;
+                        cDiv.innerHTML = `<b style="color:var(--md-primary); margin-right:6px;">${c.charName}</b> <span style="color:#e7e9ea;">${OS.formatMarkdown(c.text)}</span>`;
                     } else {
                         cDiv.innerHTML = `<b style="color:white; margin-right:6px;">${c.charName}</b> ${OS.formatMarkdown(c.text)}`;
                     }
@@ -123,7 +123,8 @@ const UstagramApp = {
         }
     },
 
-    generatePost: async function() {
+    generatePost: async function(isAuto) {
+        if (!isAuto && window.OS && OS.guardBusy("⏳ Please wait — a task is still running.")) return;
         const btn = document.getElementById('ugGenBtn');
         if (btn) { btn.disabled = true; btn.innerText = "⏳ Dreaming..."; }
         const bot = State.characters[Math.floor(Math.random() * State.characters.length)];
@@ -191,7 +192,7 @@ flux prompt: [visual description]
         const post = (State.instagramPosts || []).find(p => p.id === postId);
         if (!post) return;
 
-        const userName = (State.settings && State.settings.userName) || 'You';
+        const userName = (State.userProfile && State.userProfile.name) || 'You';
         if (!post.comments) post.comments = [];
         post.comments.push({ charId: 'user', charName: userName, text, isUser: true, timestamp: Date.now() });
         State.save();
@@ -201,9 +202,7 @@ flux prompt: [visual description]
         if (!poster) return;
         try {
             const api = window.API;
-            const provider = (State.settings && State.settings.provider) || 'deepinfra';
-            const hasKey = provider === 'localllm' || State.settings.key;
-            if (!api || !hasKey) return;
+            if (!api || !api.isReady()) return;
             const msg = await api.sendMessage(poster.id, `You are ${poster.name} on Ustagram. You posted a photo with caption: "${post.caption}". ${userName} commented: "${text}". Write a short, in-character reply to their comment (max 12 words, emojis welcome). Output ONLY the reply text.`, null, false, 'social');
             if (msg && msg.length > 1) {
                 const freshPost = (State.instagramPosts || []).find(p => p.id === postId);
@@ -249,9 +248,8 @@ flux prompt: [visual description]
         this.stopAutoPost();
         const s = State.settings || {};
         if (!s.autoPostEnabled || !s.autoPostUstagram) return;
-        // Check for API key (not needed for localllm provider)
-        const provider = s.provider || 'deepinfra';
-        if (provider !== 'localllm' && !s.key) return;
+        // Local providers need no key; cloud providers need one.
+        if (!window.API.isReady()) return;
         const interval = (s.autoPostInterval || 5) * 60 * 1000;
         // Add random jitter ±30% so feeds don't all post at the same time
         const jitter = interval * (0.7 + Math.random() * 0.6);
@@ -262,12 +260,12 @@ flux prompt: [visual description]
             this._autoPostTimer = setInterval(() => {
                 if (this._autoPosting) return; // Don't stack if previous is still running
                 this._autoPosting = true;
-                this.generatePost().finally(() => { this._autoPosting = false; });
+                this.generatePost(true).finally(() => { this._autoPosting = false; });
             }, jitter);
             // Also do the first post now
             if (!this._autoPosting) {
                 this._autoPosting = true;
-                this.generatePost().finally(() => { this._autoPosting = false; });
+                this.generatePost(true).finally(() => { this._autoPosting = false; });
             }
         }, initialDelay);
         this.updateAutoPostIndicator();
@@ -286,8 +284,7 @@ flux prompt: [visual description]
         const indicator = document.getElementById('ugAutoPostIndicator');
         if (!indicator) return;
         const s = State.settings || {};
-        const provider = s.provider || 'deepinfra';
-        const hasKey = provider === 'localllm' || s.key;
+        const hasKey = window.API.isReady();
         if (s.autoPostEnabled && s.autoPostUstagram && hasKey) {
             indicator.style.display = 'inline-block';
             indicator.title = `Auto-posting every ${s.autoPostInterval || 5} min`;
