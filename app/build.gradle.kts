@@ -2,6 +2,8 @@ import java.util.Properties
 
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.hilt.android)
+    alias(libs.plugins.kotlin.ksp)
 }
 
 extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
@@ -103,6 +105,14 @@ extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
         sourceCompatibility = JavaVersion.VERSION_21
         targetCompatibility = JavaVersion.VERSION_21
     }
+
+    buildFeatures {
+        compose = true
+    }
+
+    composeOptions {
+        kotlinCompilerExtensionVersion = "2.3.21"
+    }
 }
 
 kotlin {
@@ -196,15 +206,61 @@ tasks.named("preBuild") {
  }
 
 dependencies {
+    // Core Android
     implementation(libs.appcompat)
     implementation(libs.material)
     implementation(libs.activity)
+    implementation(libs.activity.compose)
     implementation(libs.constraintlayout)
-    implementation(libs.gson)
-    implementation(libs.okhttp)
     implementation(libs.webkit)
+
+    // Jetpack Compose
+    implementation(platform(libs.compose.bom))
+    implementation(libs.compose.ui)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.foundation)
+    implementation(libs.compose.runtime)
+    implementation(libs.compose.ui.tooling.preview)
+    debugImplementation(libs.compose.ui.tooling)
+
+    // Navigation
+    implementation(libs.compose.navigation)
+
+    // Room Database
+    implementation(libs.room.runtime)
+    implementation(libs.room.ktx)
+    ksp(libs.room.compiler)
+
+    // Hilt
+    implementation(libs.hilt.android)
+    ksp(libs.hilt.compiler)
+    implementation(libs.hilt.navigation.compose)
+
+    // ViewModel + Compose
+    implementation(libs.lifecycle.viewmodel.compose)
+
+    // Retrofit + OkHttp
+    implementation(libs.retrofit)
+    implementation(libs.retrofit.gson)
+    implementation(libs.okhttp)
+
+    // Coil (image loading)
+    implementation(libs.coil.compose)
+
+    // WorkManager
+    implementation(libs.work.runtime.ktx)
+
+    // Coroutines
     implementation(libs.coroutines)
+    implementation(libs.coroutines.core)
+
+    // JSON
+    implementation(libs.gson)
+
+    // Security
     implementation(libs.security.crypto)
+
+    // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)
     androidTestImplementation(libs.espresso.core)
