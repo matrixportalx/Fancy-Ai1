@@ -110,7 +110,8 @@ agent created that mess; it is intentionally removed).
 | **Chat/Messaging** | `js/apps/messenger.js` | `API.chat()`, `CharacterService.get()`, `State.getSession()` | `api.js`, `characters.js`, `state.js` |
 | **Social posts (Ustagram/Rebbit)** | `js/apps/ustagram.js`, `rebbit.js` | `API.chat()`, `ImagingApp.generate()` | `imaging.js`, `api.js` |
 | **Dossier/memory** | `js/core/api.js:` `evolveDossier()` | `State.characters[].dossier` | `state.js` |
-| **LLM inference** | `js/core/api.js` | `AndroidBridge.runLlamaInference()` (native) or HTTP (cloud) | `jni.cpp` (native), no dependencies within JS |
+| **LLM provider selection** | `js/core/api.js:200` (chat method) | Cases: deepinfra, openrouter, localllm, custom, **llama** | All chat callers |
+| **LLM inference** | `js/core/api.js:359` (llama) / HTTP (others) | `AndroidBridge.runLlamaInference()` (native) or HTTP (cloud) | `jni.cpp` (native), no dependencies within JS |
 | **Settings persistence** | `js/core/state.js:` `State.settings` | `AndroidBridge.saveToFile()` | `state.js` only |
 
 **Quick reference for common edits:**
