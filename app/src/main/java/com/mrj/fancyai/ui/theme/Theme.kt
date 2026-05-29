@@ -2,7 +2,6 @@ package com.mrj.fancyai.ui.theme
 
 import android.app.Activity
 import android.os.Build
-import androidx.compose.foundation.isSystemInDarkMode
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
@@ -30,7 +29,7 @@ private val LightColorScheme = lightColorScheme(
 
 @Composable
 fun FancyAITheme(
-    darkTheme: Boolean = isSystemInDarkMode(),
+    darkTheme: Boolean = false,
     dynamicColor: Boolean = true,
     content: @Composable () -> Unit
 ) {
