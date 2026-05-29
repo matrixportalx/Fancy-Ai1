@@ -694,7 +694,8 @@ const MessengerApp = {
             const response = await API.sendMessage(this.activeCharId, userText, (chunk) => {
                 if (!firstTokenTs) firstTokenTs = Date.now();
                 chunkCount++;
-                bubble.innerHTML = OS.formatMarkdown(chunk);
+                // Show raw text while streaming (avoid expensive markdown on every token)
+                bubble.textContent = chunk;
                 // Live tokens/sec — exact for on-device (one callback per token),
                 // approximate for cloud streaming (chars/4 floor).
                 const secs = (Date.now() - firstTokenTs) / 1000;
