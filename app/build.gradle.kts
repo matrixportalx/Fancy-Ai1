@@ -264,6 +264,14 @@ dependencies {
     // Security
     implementation(libs.security.crypto)
 
+    // Camera & Vision
+    implementation(libs.camera.core)
+    implementation(libs.camera.camera2)
+    implementation(libs.camera.lifecycle)
+    implementation(libs.camera.view)
+    implementation(libs.mlkit.vision.common)
+    implementation(libs.mlkit.text.recognition)
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.ext.junit)

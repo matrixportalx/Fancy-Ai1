@@ -24,6 +24,9 @@ webkit = "1.16.0"
 coroutines = "1.8.1"
 securityCrypto = "1.1.0-alpha06"
 lifecycleViewmodelCompose = "2.8.7"
+cameraX = "1.3.0"
+mlkitVision = "13.0.0"
+mlkitTextRecognition = "16.0.0"
 
 [libraries]
 junit = { group = "junit", name = "junit", version.ref = "junit" }
@@ -84,6 +87,14 @@ coroutines-core = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-
 
 # Security
 security-crypto = { group = "androidx.security", name = "security-crypto", version.ref = "securityCrypto" }
+
+# Camera & Vision
+camera-core = { group = "androidx.camera", name = "camera-core", version.ref = "cameraX" }
+camera-camera2 = { group = "androidx.camera", name = "camera-camera2", version.ref = "cameraX" }
+camera-lifecycle = { group = "androidx.camera", name = "camera-lifecycle", version.ref = "cameraX" }
+camera-view = { group = "androidx.camera", name = "camera-view", version.ref = "cameraX" }
+mlkit-vision-common = { group = "com.google.mlkit", name = "vision-common", version.ref = "mlkitVision" }
+mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition", version.ref = "mlkitTextRecognition" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

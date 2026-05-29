@@ -12,8 +12,12 @@ import com.mrj.fancyai.ui.characters.CharacterViewModel
 import com.mrj.fancyai.ui.chat.ChatViewModel
 import com.mrj.fancyai.ui.gallery.GalleryViewModel
 import com.mrj.fancyai.ui.imaging.ImagingViewModel
+import com.mrj.fancyai.ui.phone.PhoneViewModel
 import com.mrj.fancyai.ui.settings.SettingsViewModel
 import com.mrj.fancyai.ui.social.SocialViewModel
+import com.mrj.fancyai.service.AgentService
+import com.mrj.fancyai.service.VisionService
+import com.mrj.fancyai.service.VoiceService
 
 object ServiceLocator {
     private lateinit var database: AppDatabase
@@ -23,6 +27,9 @@ object ServiceLocator {
     private lateinit var socialRepository: SocialRepository
     private lateinit var mediaRepository: MediaRepository
     private lateinit var llamaEngine: LlamaEngine
+    private lateinit var voiceService: VoiceService
+    private lateinit var visionService: VisionService
+    private lateinit var agentService: AgentService
 
     fun initialize(context: Context) {
         database = AppDatabase.getInstance(context)
@@ -32,6 +39,9 @@ object ServiceLocator {
         socialRepository = SocialRepository(database)
         mediaRepository = MediaRepository(context)
         llamaEngine = LlamaEngine()
+        voiceService = VoiceService(context)
+        visionService = VisionService(context)
+        agentService = AgentService()
     }
 
     fun getCharacterViewModel(): CharacterViewModel =
@@ -52,7 +62,16 @@ object ServiceLocator {
     fun getImagingViewModel(): ImagingViewModel =
         ImagingViewModel(settingsRepository, mediaRepository)
 
+    fun getPhoneViewModel(charId: String): PhoneViewModel =
+        PhoneViewModel(charId, chatRepository, llamaEngine, voiceService)
+
     fun getLlamaEngine(): LlamaEngine = llamaEngine
+
+    fun getVoiceService(): VoiceService = voiceService
+
+    fun getVisionService(): VisionService = visionService
+
+    fun getAgentService(): AgentService = agentService
 
     fun getCharacterRepository(): CharacterRepository = characterRepository
 
