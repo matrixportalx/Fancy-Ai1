@@ -535,6 +535,47 @@ fun SettingsScreen(
                 }
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Category: About & Support
+            val ctx = LocalContext.current
+            fun openUrl(url: String) {
+                runCatching {
+                    ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(url)))
+                }
+            }
+            SettingsCategory(title = "About & Support", icon = Icons.Default.Info) {
+                Text("Fancy AI · v4.0.0", style = MaterialTheme.typography.bodyMedium, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { openUrl("https://github.com/Mr-J-369/Fancy-Ai/issues") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Report a bug (GitHub)") }
+                Spacer(modifier = Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = { openUrl("https://t.me/Fancy_AI_MrJ") },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) { Text("Telegram / Updates") }
+
+                Spacer(modifier = Modifier.height(16.dp))
+                Text("Thanks & credits", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    "Fancy AI stands on amazing open-source work. Thank you to:\n" +
+                        "• llama.cpp — on-device LLM engine\n" +
+                        "• Local Dream — on-device NPU image generation (github.com/xororz/local-dream)\n" +
+                        "• Stable Diffusion WebUI Forge / AUTOMATIC1111 — image backends\n" +
+                        "• DeepInfra & OpenRouter — cloud LLM providers\n" +
+                        "• Jetpack Compose, Room, WorkManager, CameraX, ML Kit (AndroidX)\n" +
+                        "• Retrofit, OkHttp, Gson, Coil, Kotlin & coroutines\n" +
+                        "See the NOTICE file for full license attributions.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color.Gray
+                )
+            }
+
             Spacer(modifier = Modifier.height(48.dp))
         }
     }

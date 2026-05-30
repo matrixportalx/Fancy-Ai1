@@ -16,7 +16,6 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" tools:ignore="SelectedPhotoAccess,PermissionImpliesUnsupportedHardware,ProtectedPermissions,MissingPermission,PermissionUsage" />
 
     <application
-        android:debuggable="false"
         android:extractNativeLibs="true"
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"

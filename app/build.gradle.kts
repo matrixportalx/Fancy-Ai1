@@ -16,8 +16,8 @@ extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
         applicationId = "com.mrj.fancyai"
         minSdk = 24
         targetSdk = 35
-        versionCode = 2
-        versionName = "3.0.5"
+        versionCode = 3
+        versionName = "4.0.0"
         ndkVersion = "27.2.12479018"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -97,7 +97,10 @@ extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8 full-mode: shrink + obfuscate + optimize. Keep rules that protect the
+            // JNI boundary, Gson models, Retrofit, and WorkManager live in proguard-rules.pro.
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -133,6 +136,12 @@ extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
 kotlin {
     jvmToolchain(21)
 }
+
+// The release-only "produceReleaseComposeMapping" task pulls an artifact
+// (org.jetbrains.kotlin:compose-group-mapping) that isn't published in our configured
+// repos. It only emits Compose group metadata for Layout Inspector — nothing the APK needs
+// at runtime — so disable it to unblock release builds.
+tasks.matching { it.name.contains("ComposeMapping") }.configureEach { enabled = false }
 
 // Note: Hexagon skeleton libraries are now signed during the build process to ensure
 // reliable HPU/NPU offloading on production devices (Signed Process Domain).
