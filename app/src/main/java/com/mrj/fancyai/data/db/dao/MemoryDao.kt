@@ -16,6 +16,10 @@ interface MemoryDao {
     @Query("SELECT * FROM memories WHERE charId = :charId ORDER BY timestamp DESC LIMIT 50")
     fun getRecentMemories(charId: String): Flow<List<MemoryEntity>>
 
+    /** One-shot snapshot of all memories (for backup). */
+    @Query("SELECT * FROM memories")
+    suspend fun getAllOnce(): List<MemoryEntity>
+
     @Insert
     suspend fun insert(memory: MemoryEntity)
 
@@ -27,4 +31,7 @@ interface MemoryDao {
 
     @Query("DELETE FROM memories WHERE charId = :charId")
     suspend fun deleteByCharId(charId: String)
+
+    @Query("DELETE FROM memories WHERE id = :id")
+    suspend fun deleteById(id: String)
 }

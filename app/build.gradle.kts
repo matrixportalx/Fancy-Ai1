@@ -3,9 +3,9 @@ import java.util.Properties
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.compose.compiler)
-    // TODO: Re-add Hilt and KSP after resolving version compatibility
+    alias(libs.plugins.kotlin.ksp)
+    // TODO: Re-add Hilt after resolving version compatibility
     // alias(libs.plugins.hilt.android)
-    // alias(libs.plugins.kotlin.ksp)
 }
 
 extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
@@ -27,6 +27,10 @@ extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
 
         externalNativeBuild {
             cmake {
+                // CPU-only build (FANCYAI_ENABLE_ACCELERATORS=OFF in CMakeLists). If you
+                // re-enable the Vulkan backend, also add "-DANDROID_PLATFORM=android-28"
+                // here — ggml-vulkan links Vulkan 1.1 symbols the NDK libvulkan only
+                // exports from API 28.
                 val hexagonSdkRoot = System.getenv("HEXAGON_SDK_ROOT")
                     ?: project.findProperty("HEXAGON_SDK_ROOT")?.toString()
                 if (!hexagonSdkRoot.isNullOrBlank()) {
@@ -39,6 +43,11 @@ extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
                 } else {
                     println("[fancy_ai] HEXAGON_SDK_ROOT not set — CPU-only build")
                 }
+                
+                // Add 16 KB page size support for Android 15+ (S25 Ultra, etc.)
+                // Ensures native segments are aligned to the system's page size.
+                arguments += "-DCMAKE_C_FLAGS=-Wl,-z,common-page-size=16384 -Wl,-z,max-page-size=16384"
+                arguments += "-DCMAKE_CXX_FLAGS=-Wl,-z,common-page-size=16384 -Wl,-z,max-page-size=16384"
             }
         }
     }
@@ -55,12 +64,16 @@ extensions.configure<com.android.build.api.dsl.ApplicationExtension> {
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            // IMPORTANT: We must EXCLUDE libOpenCL.so from the APK bundle.
-            // On modern devices (Android 15+), bundling a non-aligned ICD loader 
-            // causes the "LOAD segment not aligned" (16 KB) error. 
-            // By excluding it, the app correctly resolves libOpenCL.so from 
-            // the /vendor partition, which is guaranteed to be aligned.
+            // Exclude libOpenCL.so: on Android 15+ a non-aligned ICD loader triggers
+            // the "LOAD segment not aligned" (16 KB) error; the app resolves the
+            // aligned libOpenCL.so from /vendor instead.
             excludes += "**/libOpenCL.so"
+            // CPU-only build: the Qualcomm QNN + Hexagon HTP skel libs aren't used and
+            // would just bloat the APK (~70 MB) and get probed at startup. They remain
+            // in src/main/jniLibs — re-enabling FANCYAI_ENABLE_ACCELERATORS repackages
+            // them (drop these two excludes when you do).
+            excludes += "**/libQnn*.so"
+            excludes += "**/libggml-htp-*.so"
         }
     }
 
@@ -220,6 +233,7 @@ dependencies {
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)
+    implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.foundation)
     implementation(libs.compose.runtime)
     implementation(libs.compose.ui.tooling.preview)
@@ -231,8 +245,7 @@ dependencies {
     // Room Database
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
-    // TODO: Re-add KSP and Room compiler after resolving version compatibility
-    // ksp(libs.room.compiler)
+    ksp(libs.room.compiler)
 
     // TODO: Re-add Hilt after resolving AGP 9.2.1 compatibility
     // Hilt

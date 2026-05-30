@@ -25,6 +25,10 @@ interface SocialPostDao {
     @Query("SELECT * FROM social_posts WHERE id = :id")
     fun getById(id: String): Flow<SocialPostEntity?>
 
+    /** One-shot snapshot of every post — used by the gallery to map images to characters. */
+    @Query("SELECT * FROM social_posts")
+    suspend fun getAllOnce(): List<SocialPostEntity>
+
     @Insert
     suspend fun insert(post: SocialPostEntity)
 

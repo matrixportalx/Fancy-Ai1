@@ -5,19 +5,46 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.mrj.fancyai.data.repository.ChatRepository
+import com.mrj.fancyai.data.db.entity.CharacterEntity
+import com.mrj.fancyai.data.db.entity.MessageEntity
+import com.mrj.fancyai.data.repository.MediaRepository
+import com.mrj.fancyai.data.repository.MessengerRepository
+import com.mrj.fancyai.data.repository.SettingsRepository
+import com.mrj.fancyai.domain.inference.ChatTemplate
+import com.mrj.fancyai.domain.inference.ChatTurn
 import com.mrj.fancyai.domain.inference.LlamaEngine
+import com.mrj.fancyai.domain.inference.PromptBuilder
+import com.mrj.fancyai.domain.inference.PromptContext
+import com.mrj.fancyai.domain.inference.UserProfile
 import com.mrj.fancyai.service.VoiceService
-import kotlinx.coroutines.flow.collect
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
+import java.io.File
 import java.util.UUID
 
 class PhoneViewModel(
     private val charId: String,
-    private val chatRepository: ChatRepository,
+    private val messengerRepository: MessengerRepository,
+    private val mediaRepository: MediaRepository,
+    private val settingsRepository: SettingsRepository,
     private val llamaEngine: LlamaEngine,
     private val voiceService: VoiceService
 ) : ViewModel() {
+
+    private val _character = MutableStateFlow<CharacterEntity?>(null)
+    val character: StateFlow<CharacterEntity?> = _character.asStateFlow()
+
+    init {
+        viewModelScope.launch {
+            messengerRepository.getCharacter(charId).collectLatest { _character.value = it }
+        }
+    }
+
+    fun resolveAvatar(ref: String?): File? = ref?.let { mediaRepository.resolveToFile(it) }
 
     var isCallActive by mutableStateOf(false)
         private set
@@ -76,41 +103,71 @@ class PhoneViewModel(
             aiResponse = ""
 
             try {
-                val cbId = llamaEngine.getNextCbId()
-                var accumulated = ""
-
-                llamaEngine.tokenFlow.collect { (id, token) ->
-                    if (id == cbId) {
-                        accumulated += token
-                        aiResponse = accumulated
-                    }
+                val character = messengerRepository.getCharacter(charId).first()
+                if (character == null) {
+                    aiResponse = "No character to call."
+                    return@launch
                 }
 
-                // Speak the response
-                voiceService.speak(accumulated)
+                val history = messengerRepository.getMessages(charId).first()
+                    .takeLast(settingsRepository.historyCap)
+                    .map {
+                        val role = if (it.sender == "user") ChatTurn.Role.USER else ChatTurn.Role.ASSISTANT
+                        ChatTurn(role, it.text)
+                    }
+                val dossier = messengerRepository.getDossier(charId).first()?.dossierJson
+                val memories = messengerRepository.getMemories(charId).first().map { it.text }
 
-                // Save to chat history
-                val userMsg = com.mrj.fancyai.data.db.entity.MessageEntity(
-                    id = UUID.randomUUID().toString(),
-                    charId = charId,
-                    sender = "user",
-                    text = text,
-                    type = "text",
-                    timestamp = System.currentTimeMillis()
+                val prompt = PromptBuilder.build(
+                    context = PromptContext.CHAT,
+                    character = character,
+                    user = UserProfile(settingsRepository.userName, settingsRepository.userBio),
+                    userText = text,
+                    history = history,
+                    dossierJson = dossier,
+                    memories = memories,
+                    globalGuidelines = settingsRepository.systemPrompt,
+                    template = ChatTemplate.from(settingsRepository.chatTemplate)
                 )
-                val aiMsg = com.mrj.fancyai.data.db.entity.MessageEntity(
-                    id = UUID.randomUUID().toString(),
-                    charId = charId,
-                    sender = "ai",
-                    text = accumulated,
-                    type = "text",
-                    timestamp = System.currentTimeMillis()
-                )
 
-                chatRepository.insertMessage(userMsg)
-                chatRepository.insertMessage(aiMsg)
+                val reply = StringBuilder()
+                llamaEngine.generateStream(
+                    prompt = prompt,
+                    maxTokens = settingsRepository.maxTokens,
+                    temperature = settingsRepository.temperature,
+                    topK = settingsRepository.topK,
+                    topP = settingsRepository.topP
+                ).collect { token ->
+                    reply.append(token)
+                    aiResponse = reply.toString()
+                }
 
-                // Ready for next input
+                val answer = reply.toString().trim()
+                if (answer.isNotEmpty()) {
+                    voiceService.speak(answer)
+
+                    messengerRepository.insertMessage(
+                        MessageEntity(
+                            id = UUID.randomUUID().toString(),
+                            charId = charId,
+                            sender = "user",
+                            text = text,
+                            type = "text",
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                    messengerRepository.insertMessage(
+                        MessageEntity(
+                            id = UUID.randomUUID().toString(),
+                            charId = charId,
+                            sender = "ai",
+                            text = answer,
+                            type = "text",
+                            timestamp = System.currentTimeMillis()
+                        )
+                    )
+                }
+
                 userText = ""
             } catch (e: Exception) {
                 aiResponse = "Error: ${e.message}"

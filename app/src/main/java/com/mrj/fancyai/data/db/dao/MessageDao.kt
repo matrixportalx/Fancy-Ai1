@@ -30,4 +30,19 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE charId = :charId")
     suspend fun deleteByCharId(charId: String)
+
+    @Query("SELECT * FROM messages ORDER BY timestamp DESC")
+    fun getAllMessages(): Flow<List<MessageEntity>>
+
+    /** One-shot snapshot of all messages (for backup). */
+    @Query("SELECT * FROM messages")
+    suspend fun getAllOnce(): List<MessageEntity>
+
+    /** The single most-recent message per character — for the inbox, without loading all rows. */
+    @Query(
+        "SELECT m.* FROM messages m INNER JOIN " +
+            "(SELECT charId, MAX(timestamp) AS maxTs FROM messages GROUP BY charId) latest " +
+            "ON m.charId = latest.charId AND m.timestamp = latest.maxTs GROUP BY m.charId"
+    )
+    fun getLatestPerCharacter(): Flow<List<MessageEntity>>
 }

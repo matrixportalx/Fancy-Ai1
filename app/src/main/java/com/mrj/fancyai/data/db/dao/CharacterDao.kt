@@ -28,4 +28,18 @@ interface CharacterDao {
 
     @Query("DELETE FROM characters WHERE id = :id")
     suspend fun deleteById(id: String)
+
+    @Query("SELECT EXISTS(SELECT 1 FROM characters WHERE id = :id)")
+    suspend fun exists(id: String): Boolean
+
+    @Query("SELECT COUNT(*) FROM characters")
+    suspend fun getCount(): Int
+
+    /** One-shot snapshot of all characters (for backup). */
+    @Query("SELECT * FROM characters")
+    suspend fun getAllOnce(): List<CharacterEntity>
+
+    /** Wipes all characters; child rows cascade-delete. Used by restore. */
+    @Query("DELETE FROM characters")
+    suspend fun deleteAll()
 }

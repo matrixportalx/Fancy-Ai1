@@ -11,7 +11,11 @@ data class CharacterEntity(
     val bio: String = "",
     val persona: String = "",
     val avatarRef: String? = null,
-    val enableRebbit: Boolean = true,
+    val enableRebbit: Boolean = true, // legacy; superseded by the autoPost* opt-ins below
     val followerCount: Int = 0,
+    // Per-character autonomous-posting opt-in: which social apps this character may post to.
+    val autoPostUstagram: Boolean = true,
+    val autoPostRebbit: Boolean = true,
+    val autoPostY: Boolean = true,
     val timestamp: Long = System.currentTimeMillis()
 )

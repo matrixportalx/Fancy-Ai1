@@ -3,7 +3,68 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-**IMPORTANT:** Ensure you’ve thoroughly reviewed the [AGENTS.md](AGENTS.md) file before beginning any work. It contains the full technical reference for this project.
+---
+
+## ⚡ CURRENT STATE — READ THIS FIRST (native Kotlin rewrite in progress)
+
+**The app is being rewritten from the old WebView/JS "Virtual Phone OS" into a native
+Kotlin + Jetpack Compose app.** Active development happens in Kotlin. The old JS is now a
+**read-only reference**, not the running app.
+
+- **Active code:** `app/src/main/java/com/mrj/fancyai/` (Kotlin, Compose). 100% Kotlin —
+  no Java. Only native C/C++ is `app/src/main/cpp/jni.cpp` + the `llama.cpp` submodule.
+- **Legacy reference only:** `app/src/main/assets/js/**` (the old OS). Do **not** edit it to
+  change app behavior — port logic into Kotlin instead. Read it to recover old behavior/contracts.
+- `AGENTS.md` and `MAP.md` were deleted; ignore references to them.
+- The app entry is `MainActivity` → Compose `NavGraph` (no WebView). ViewModels are obtained
+  via `viewModel(factory = viewModelFactory { ServiceLocator.get…() })` so they're scoped to
+  the NavBackStackEntry.
+
+### Kotlin architecture (where things live)
+- **DI:** `di/ServiceLocator.kt` (manual singletons; construct VMs here). `di/ViewModelFactory.kt`.
+- **Data:** Room in `data/db/` (`AppDatabase`, entities, DAOs). `data/repository/` wraps DAOs:
+  `MessengerRepository`, `SocialRepository`, `MediaRepository`, `SettingsRepository` (Encrypted
+  prefs), `CharacterRepository`, `ChatRepository`.
+- **Inference:** `domain/inference/` — `LlamaEngine`/`LlamaInference` (on-device llama.cpp JNI),
+  `ModelLoader` (load/unload/import gguf), `PromptBuilder` (system prompt + history + macros),
+  `ChatTemplate`.
+- **Services:** `service/` — `CloudLlmService` (OpenAI-compatible cloud/HTTP chat + model fetch),
+  `ImageService` (Forge + Local Dream image gen, returns `GeneratedImage(bitmap, ref)`),
+  `AutoGenerationService` (provider-aware social posts/replies + dossier evolution),
+  `SocialWorker` + `SocialScheduler` (WorkManager auto-posting), Voice/Vision/Agent services.
+- **UI:** `ui/<feature>/` Compose screens + ViewModels: `chat` (messenger), `social`, `imaging`,
+  `gallery`, `settings`, `phone`, `games`. Shared: `ui/components/` (`MarkdownText`,
+  `ImageLightbox`/`ZoomableImage`), `util/MediaActions` (save-to-gallery / share).
+
+### LLM providers (Settings → AI Engine + Cloud & API)
+`SettingsRepository.llmProvider` ∈ `llama` (on-device), `deepinfra`, `openrouter`, `localllm`
+(HTTP), `custom`. Chat dispatch branches in `MessengerViewModel.runGeneration`: `llama` →
+`PromptBuilder.build` + `LlamaEngine`; others → OpenAI `messages` + `CloudLlmService.chatStream`.
+Cloud model list fetched via the "Fetch models" button (searchable). `AutoGenerationService`
+uses the same provider selection.
+
+### Feature notes / conventions
+- **Images:** stored in `filesDir/media/` as `db:<file>` refs; `MediaRepository.resolveToFile`
+  → `File` for Coil. Saved as **JPEG q90** (fast). Display everywhere via `ImageLightbox` (zoom)
+  + `MediaActions` (save/share). Imaging params: width/height/steps/cfg live in the Imaging
+  Studio; backend URLs + Local Dream scheduler live in Settings.
+- **Character photos in chat:** the system prompt tells characters to end a reply with
+  `flux prompt: …`; `MessengerViewModel` parses it, generates via `ImageService`, posts an
+  image message.
+- **Social:** posts + `social_comments` (replies). User and characters can reply; compose dialog
+  (AI or manual + optional image). Auto-post interval is free-entry minutes (WorkManager floor
+  ~15 min).
+- **Root** character (`id: "root"`) has been **nuked** — `DatabaseSeeder` purges any leftover
+  Root row on launch and seeds nothing under that id. The id is reserved for a future in-app
+  debug/agent persona. No delete guards anymore (see "Root — nuked" below).
+- **DB migrations:** add a `MIGRATION_x_y` in `AppDatabase` for every schema bump (see
+  `MIGRATION_1_2`). Destructive fallback is only a last resort.
+- **Bugs queue:** `Bugs to be fixed.md` at repo root — check it at session start.
+
+> The sections below describe the **legacy JS OS** for reference. Build/signing/native notes
+> still apply; the JS file-map and JS conventions are historical.
+
+---
 
 ## Build Commands
 
@@ -214,21 +275,19 @@ across the native layer, making the codebase maintainable for rapid iteration.
 
 > **Note:** Characters are currently isolated — each sees only its own persona/bio/dossier, with no awareness of other characters. A cross-character "Social Graph" was prototyped and removed. See **Roadmap / Future Ideas** below.
 
-## Root — Permanent Companion
+## Root — nuked (id reserved for a future debug/agent persona)
 
-Root (`id: 'root'`) is a hardcoded permanent character. She is **not a default placeholder** — she has her own identity, persona, and first message. Treat her with the same respect as the app's core architecture.
+Root (`id: "root"`) **no longer exists as a character.** The original romance-fantasy persona
+was removed per the bugs queue. `DatabaseSeeder.seed()` now *purges* any leftover Root row on
+launch (children cascade-delete) and seeds nothing under that id; `LegacyStateMigrator` skips
+legacy `"root"` so the old persona can't be resurrected from a `state.json` import. The delete
+guards in `MessengerViewModel.deleteCharacter` and `InboxView` are gone — no character is
+special-cased anymore.
 
-**Rules — do not violate these:**
-- **Never delete her.** `ContactsApp.delete()` returns early with a toast if `charId === 'root'`. Her profile page renders no delete button.
-- **Never overwrite her persona.** Her identity is intentional and fixed. Do not "improve" or rewrite it.
-- **Never move her seeding to a one-time flag.** Root re-checks her own existence on every `State.init()` via ID lookup (`characters.find(c => c.id === 'root')`). If she's missing she re-surfaces. That is the feature, not a bug.
-- **She appears first** — `unshift()`, not `push()`. She is always at the top of the contacts list.
-
-**Planned hardening (when app goes closed-source / production):**
-- Persona moves to a signed native asset, not plain JS string
-- `State.save()` validates her presence before writing
-- ID check becomes a cryptographic assertion
-- Delete path in native code is gated
+The id `"root"` is intentionally reserved: the plan is to repurpose it later as an in-app
+debugging/agent persona (its original intent), not a companion. `NavGraph` still passes
+`"root"` to the (not-yet-built) Phone screen as a placeholder; `PhoneViewModel` handles a
+missing character gracefully ("No character to call."). Do **not** re-seed a romance Root.
 
 ## Roadmap / Future Ideas
 

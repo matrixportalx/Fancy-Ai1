@@ -42,6 +42,7 @@ constraintlayout = { group = "androidx.constraintlayout", name = "constraintlayo
 compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "compose" }
 compose-ui = { group = "androidx.compose.ui", name = "ui" }
 compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "composeMaterial3" }
+compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version = "1.7.8" }
 compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
 compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
 compose-foundation = { group = "androidx.compose.foundation", name = "foundation" }
@@ -99,6 +100,6 @@ mlkit-text-recognition = { group = "com.google.mlkit", name = "text-recognition"
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 hilt-android = { id = "com.google.dagger.hilt.android", version.ref = "hilt" }
-kotlin-ksp = { id = "com.google.devtools.ksp", version = "1.0.27-1.0.0" }
+kotlin-ksp = { id = "com.google.devtools.ksp", version = "2.3.9" }
 compose-compiler = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 

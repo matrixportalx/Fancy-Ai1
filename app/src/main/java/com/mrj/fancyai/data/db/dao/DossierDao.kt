@@ -13,6 +13,10 @@ interface DossierDao {
     @Query("SELECT * FROM dossiers WHERE charId = :charId")
     fun getDossier(charId: String): Flow<DossierEntity?>
 
+    /** One-shot snapshot of all dossiers (for backup). */
+    @Query("SELECT * FROM dossiers")
+    suspend fun getAllOnce(): List<DossierEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(dossier: DossierEntity)
 
